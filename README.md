@@ -71,6 +71,10 @@ python3 tools/pm_eeprom_gui.py            # or drop a dump on it: ... gui.py myd
 
 ![The EEPROM editor with a PM4600 dump loaded](docs/gui.png)
 
+*A PM4600 whose DeltaRange limit has already been changed: the secondary range at 600 g is
+still there, but its increment now equals the base one, so the balance shows 10 mg over the
+whole weighing range.*
+
 Open a dump, and the left pane shows everything the balance stores. The right-hand panels apply the
 corrections; each one writes a line into the change log so you can see exactly what moved. Nothing is
 written to disk until you press *Save as...*, and *Revert* takes you back to the file as opened.
