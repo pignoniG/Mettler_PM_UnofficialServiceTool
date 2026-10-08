@@ -50,7 +50,7 @@ class App(ttk.Frame):
         box.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
         box.rowconfigure(0, weight=1)
         box.columnconfigure(0, weight=1)
-        self.info = tk.Text(box, width=74, height=30, wrap="none", font=("Menlo", 11))
+        self.info = tk.Text(box, width=82, height=30, wrap="none", font=("Menlo", 11))
         self.info.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(box, orient="vertical", command=self.info.yview)
         sb.grid(row=0, column=1, sticky="ns")

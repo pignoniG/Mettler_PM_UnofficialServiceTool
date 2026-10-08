@@ -41,18 +41,18 @@ CELL = {  # name: (addr, description)
     "T_LO":  (0x43, "temperature reading at lower TC step (info only)"),
     "T0":    (0x46, "reference temperature reading (middle TC step)"),
     "T_HI":  (0x49, "temperature reading at higher TC step (info only)"),
-    "Z0":    (0x4C, "zero offset at T0                 [raw]"),
-    "Z1":    (0x4F, "zero TC, linear                   [raw/2^16 per t]"),
-    "Z2":    (0x52, "zero TC, quadratic                [raw/2^32 per t^2]"),
-    "S0":    (0x55, "span correction at T0             [2^-24]"),
-    "S1":    (0x58, "span TC, linear                   [2^-40 per t]"),
-    "S2":    (0x5B, "span TC, quadratic                [2^-56 per t^2]"),
-    "L0":    (0x5E, "linearity (x^2 term) at T0        [2^-48 per raw]"),
+    "Z0":    (0x4C, "zero offset at T0          [raw]"),
+    "Z1":    (0x4F, "zero TC, linear            [raw/2^16 per t]"),
+    "Z2":    (0x52, "zero TC, quadratic         [raw/2^32 per t^2]"),
+    "S0":    (0x55, "span correction at T0      [2^-24]"),
+    "S1":    (0x58, "span TC, linear            [2^-40 per t]"),
+    "S2":    (0x5B, "span TC, quadratic         [2^-56 per t^2]"),
+    "L0":    (0x5E, "linearity (x^2 term) at T0 [2^-48 per raw]"),
     "L1":    (0x61, "linearity TC, linear"),
     "L2":    (0x64, "linearity TC, quadratic"),
 }
 OTHER = {"SPAN": (0x2E, "factory span factor K (weight = W*K/2^23)"),
-         "UCAL": (0x32, "user calibration trim added to K (|UCAL| <= SPAN/32)")}
+         "UCAL": (0x32, "user calibration trim, added to K (max SPAN/32)")}
 T_COUNTS_PER_C = 2000                # temperature reading counts per degC (service manual)
 
 # type-parameter decoding (firmware routine B845)
