@@ -1,0 +1,20 @@
+# Manufacturer material - never publish (copyright Mettler-Toledo)
+src/
+*.pdf
+*.7z
+
+# local firmware analysis, not part of the published EEPROM tool
+tools/rom_patch.py
+tools/dis51.py
+tools/dis_at.py
+tools/stickers.py
+tools/*.asm
+tools/fw*.bin
+tools/manual.txt
+out_PM4600/
+
+# python / editors
+tools/.venv/
+__pycache__/
+*.pyc
+.DS_Store
