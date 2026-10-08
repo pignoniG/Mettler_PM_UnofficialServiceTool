@@ -65,6 +65,8 @@ unreliable (bad contact, wrong device) - fix that before going further.
 python3 tools/pm_eeprom_gui.py            # or drop a dump on it: ... gui.py mydump.BIN
 ```
 
+![The EEPROM editor with a PM4600 dump loaded](docs/gui.png)
+
 Open a dump, and the left pane shows everything the balance stores. The right-hand panels apply the
 corrections; each one writes a line into the change log so you can see exactly what moved. Nothing is
 written to disk until you press *Save as...*, and *Revert* takes you back to the file as opened.
