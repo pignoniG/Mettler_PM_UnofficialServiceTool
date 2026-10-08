@@ -131,7 +131,9 @@ All write commands recompute every checksum and keep the file's byte order. Keep
 * **Display resolution budget**: 8 internal counts per displayed digit, and the ADC gives roughly
   30 raw counts per digit on the PM200, 15 on the PM4600, 10 on the PM6000 and 15 on the PM3000.
   So about one extra digit of *numeric* resolution exists, no more.
-* **Display width**: the VFD has 7 cells; the weight field is 6 digits plus the decimal point.
+* **Display width**: the weight field is **7 digits** (formatter 0xBD73, cells 6..0), and the decimal
+  point is a segment inside a digit's own cell, so it costs no cell. The 6-digit limit applies to the
+  interface/printer formatter (0xB9A3), not to the display.
 
 ## 8. Display increment and decimal point
 
@@ -139,12 +141,12 @@ The display increment is the byte at internal RAM 75h: the firmware takes the **
 range blocks that currently apply (0x8691 for the base increment, 0x86A2/0x86AB for the secondary ranges)
 and passes it to the formatter via XRAM 0x74E4. The **decimal point** is independent of it: it comes from
 **EEPROM byte 0x2A** (decimals in g: PM200 = 3, PM4600 = 2, PM3000/PM6000 = 1) plus an offset from the unit
-table selected by the unit code in byte 0x03. The weight field is 6 digits plus the point, in a 7-cell VFD.
+table selected by the unit code in byte 0x03. The weight field is 7 digits; the point shares a digit cell.
 
 **DeltaRange types (PM4600, PM4800, PM460, PM480, PM2500).** Type pair 0x21 holds the fine-range limit
 together with the increment used above it: on the PM4600, 60000 steps (= 600.00 g) with increment 10, which
 is what turns the 10 mg digit into 100 mg above 600 g. Setting that increment to 1 (`pm_eeprom.py fine`)
-gives **10 mg over the whole range** - 4100.90 g, six digits plus the point, exactly filling the display.
+gives **10 mg over the whole range** - 4100.90 g, which uses six of the seven digit cells.
 Byte 0x2A already says 2 decimals, so the decimal point does not move. One data byte changes, plus the block
 checksum. Headroom: 410090 steps x 8 = 3.28M, well inside the 24-bit value, and the A/D delivers about
 15 raw counts per 10 mg step.
@@ -157,7 +159,16 @@ service factor in pair 0x11 (x2, x10, x2), which the standard firmware ignores -
 the firmware, which is out of scope here. For a x10 factor the decimals byte 0x2A has to be raised with it,
 since the decimal point does not follow by itself.
 
-**How far it can go.** Resolution is bounded by the measuring cell, not by the format: the A/D accumulates
-over the cycle count in RAM 32h and is normalised by 240/32h, giving raw steps of about 6.5 mg on a PM4600,
-and the specified repeatability of these cells is one display step. Asking for ten times the resolution
-produces a digit that shows air currents, not mass.
+**How far it can go.** The display is rarely the limit - seven digits cover any of these types at ten times
+their normal resolution. The real bounds are, in order:
+
+1. **The A/D.** It accumulates over the cycle count in RAM 32h and is normalised by 240/32h, so raw values
+   arrive in steps of about 6.5 mg on a PM4600 but only 33 ug on a PM200. Divide the wanted display step by
+   that figure: fewer than a handful of counts per step and the last digit is quantisation noise.
+2. **The 24-bit internal value**, capacity in steps x the multiplier from byte 0x14, and the span factor
+   SPAN, which must both stay under 8388607.
+3. **The cell itself** - repeatability, cornerload and temperature behaviour are all far coarser than one
+   display step, so extra resolution shows stability, not better mass values.
+
+A finer step is therefore not a single byte but a coordinated rescale: decimals (0x2A), every type value,
+the base increment, the multiplier byte 0x14 and SPAN/UCAL together.
