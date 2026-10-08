@@ -65,7 +65,7 @@ class App(ttk.Frame):
         ttk.Label(gen, text="Capacity [g]").grid(row=0, column=0, sticky="w")
         self.capacity = ttk.Entry(gen, width=10)
         self.capacity.grid(row=0, column=1, sticky="w")
-        ttk.Label(gen, text="(only needed for unknown types)",
+        ttk.Label(gen, text="(override; normally read from the EEPROM)",
                   foreground="gray").grid(row=1, column=0, columnspan=2, sticky="w")
         ttk.Button(gen, text="Re-read", command=self._refresh).grid(row=0, column=2, padx=4)
 
@@ -153,10 +153,7 @@ class App(ttk.Frame):
         return float(text) if text else None
 
     def need_R(self):
-        R = pm.raw_counts_per_g(self.data, self.cap())
-        if R is None:
-            raise pm.PmError("Unknown balance type - enter the nominal capacity in grams.")
-        return R
+        return pm.raw_counts_per_g(self.data, self.cap())
 
     def num(self, entry, what):
         try:
@@ -194,10 +191,7 @@ class App(ttk.Frame):
         self.original = bytearray(self.data)
         self.path = path
         self.dirty = False
-        u, digit = pm.units(self.data)
         self.capacity.delete(0, "end")
-        if pm.NOMINAL_CAP.get(self.data[5]):
-            self.capacity.insert(0, str(pm.NOMINAL_CAP[self.data[5]]))
         self.say(f"opened {os.path.basename(path)} "
                  f"({'swapped' if self.swapped else '8051'} byte order)")
         self._refresh()
@@ -275,8 +269,6 @@ class App(ttk.Frame):
     def do_calweight(self):
         grams = self.num(self.calw, "Calibration weight")
         u, digit = pm.units(self.data, self.cap())
-        if u is None:
-            raise pm.PmError("Unknown balance type - enter the nominal capacity in grams.")
         old, _ = pm.type_value(self.data, self.data[0x25], self.data[0x26])
         new = round(grams / digit)
         if abs(new * digit - grams) > digit / 2:
@@ -380,17 +372,13 @@ class App(ttk.Frame):
         cap, _ = pm.type_value(x, x[0x15], x[0x16])
         cal, _ = pm.type_value(x, x[0x25], x[0x26])
         u, digit = pm.units(x, cap_g)
-        if digit:
-            out.append(f"\ncapacity {cap * digit:g} g    calibration weight {cal * digit:g} g    "
-                       f"display step {digit:g} g")
-            for pair in (0x21, 0x23):
-                val, step = pm.type_value(x, x[pair], x[pair + 1])
-                if val:
-                    out.append(f"  secondary range: above {val * digit:g} g the step is "
-                               f"{step * digit:g} g")
-        else:
-            out.append(f"\ncapacity {cap} steps    calibration weight {cal} steps"
-                       "\n(enter the capacity in grams for values in grams)")
+        out.append(f"\ncapacity {cap * digit:g} g    calibration weight {cal * digit:g} g    "
+                   f"display step {digit:g} g")
+        for pair in (0x21, 0x23):
+            val, step = pm.type_value(x, x[pair], x[pair + 1])
+            if val:
+                out.append(f"  secondary range: above {val * digit:g} g the step is "
+                           f"{step * digit:g} g")
         out.append("\nStored values")
         for name, (a, desc) in {**pm.OTHER, **pm.CELL}.items():
             out.append(f"  {name:5s} [{a:02X}] {pm.g24(x, a):9d}   {desc}")
@@ -403,7 +391,7 @@ class App(ttk.Frame):
             R = pm.raw_counts_per_g(x, cap_g)
             out.append(f"  ~{R:.0f} raw counts/g (estimate)")
             out.append(f"  zero TC compensation {pm.g24(x,0x4F)*T/2**16/R*1000:+.2f} mg/degC (estimate)")
-            full = R * (cap_g or pm.NOMINAL_CAP[x[5]])
+            full = R * pm.capacity_g(x, cap_g)
             out.append(f"  linearity bow at half load "
                        f"{-pm.g24(x,0x5E)*full*full/4/2**48/R*1000:+.2f} mg (estimate)")
         out.append("\nParameter sticker (lines 00-20, low 16 bits; check digit not computed)")

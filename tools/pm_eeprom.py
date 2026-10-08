@@ -58,8 +58,9 @@ T_COUNTS_PER_C = 2000                # temperature reading counts per degC (serv
 # type-parameter decoding (firmware routine B845)
 T1 = [100, 1000, 10000, 100000]; T2 = [0, 9, 90, 900]; STEP = [1, 2, 5, 10, 20, 50, 100, 200]
 MULT76 = [8, 1, 2, 4, 8, 16, 32, 64]
-NOMINAL_CAP = {0x20: 210, 0x30: 3100, 0x46: 4100, 0x60: 6100, 0x10: 110, 0x40: 410,
-               0x12: 1200, 0x21: 2100}  # model code byte 0x05 -> capacity [g] (extend as needed)
+# The display step comes from byte 0x2A, the number of decimals the balance shows in grams
+# (firmware 0xB964 + the unit table).  That is exact for every gram-based type, so no table of
+# models is needed; --capacity stays available for types whose base unit is not the gram.
 
 
 def ck(x, a, n):
@@ -104,17 +105,20 @@ def type_value(x, r7, r6):
 
 
 def units(x, capacity_g=None):
-    """internal weight units per gram, derived from the type block"""
-    cap_digits, _ = type_value(x, x[0x15], x[0x16])
-    cap_nominal = T1[x[0x16] & 3] * (x[0x15] & 0x7F)
-    mult = MULT76[(x[0x14] >> 4) & 7]   # internal units per display digit (firmware B845/B8C8;
+    """(internal counts per gram, display step in grams)"""
+    mult = MULT76[(x[0x14] >> 4) & 7]   # internal counts per display step (firmware B845/B8C8;
                                         # the service factor is NOT applied, ROM 8009 bit7 = 1)
-    if capacity_g is None:
-        capacity_g = NOMINAL_CAP.get(x[0x05])
-    if capacity_g is None:
-        return None, None
-    digit_g = capacity_g / cap_nominal
+    if capacity_g:                      # override: scale from a known capacity instead
+        digit_g = capacity_g / (T1[x[0x16] & 3] * (x[0x15] & 0x7F))
+    else:
+        digit_g = 10.0 ** -(x[0x2A] & 7)
     return mult / digit_g, digit_g
+
+
+def capacity_g(x, override=None):
+    """nominal capacity in grams, including the overload margin the type data carries"""
+    steps, _ = type_value(x, x[0x15], x[0x16])
+    return steps * units(x, override)[1]
 
 
 def sticker_words(x):
@@ -138,8 +142,10 @@ def cmd_info(x, swapped, args):
     cap, _ = type_value(x, x[0x15], x[0x16])
     cal, _ = type_value(x, x[0x25], x[0x26])
     _, sf = type_value(x, x[0x11], x[0x12])
-    print(f"type: capacity {cap} digits, cal weight {cal} digits, service factor {sf}")
-    u, digit = units(x, args.capacity)
+    u, dg = units(x, args.capacity)
+    print(f"type: capacity {cap * dg:g} g, cal weight {cal * dg:g} g, "
+          f"display step {dg:g} g, service factor {sf}")
+    digit = dg
     print()
     for name, (a, d) in {**OTHER, **CELL}.items():
         print(f"  {name:5s} [{a:02X}] {g24(x, a):9d}   {d}")
@@ -151,10 +157,9 @@ def cmd_info(x, swapped, args):
     print(f"  span TC compensation at T0 : {g24(x,0x58)*T/2**40*1e6:+.1f} ppm/degC")
     if u:
         R = raw_counts_per_g(x, args.capacity)
-        print(f"  digit {digit:g} g, internal units/g {u:g}, ~raw counts/g {R:.0f} (estimate)")
+        print(f"  internal counts/g {u:g}, ~raw counts/g {R:.0f} (estimate)")
         print(f"  zero TC compensation at T0 : {g24(x,0x4F)*T/2**16/R*1000:+.2f} mg/degC (estimate)")
-        capg = args.capacity or NOMINAL_CAP[x[5]]
-        Rf = R * capg
+        Rf = R * capacity_g(x, args.capacity)
         print(f"  linearity bow (L0) at half capacity after 2-point cal: "
               f"{-g24(x,0x5E)*Rf*Rf/4/2**48/R*1000:+.2f} mg (estimate)")
     print()
@@ -163,12 +168,7 @@ def cmd_info(x, swapped, args):
 
 
 def need_R(x, args):
-    if args.raw_per_g:
-        return args.raw_per_g
-    R = raw_counts_per_g(x, args.capacity)
-    if R is None:
-        sys.exit("unknown model code, pass --capacity <grams>")
-    return R
+    return args.raw_per_g or raw_counts_per_g(x, args.capacity)
 
 
 def apply(x, name, delta):
@@ -217,8 +217,6 @@ def encode_pair(value, step_idx, flag):
 
 def cmd_calweight(x, args):
     u, digit = units(x, args.capacity)
-    if u is None:
-        sys.exit("unknown model code, pass --capacity <grams>")
     old, step = type_value(x, x[0x25], x[0x26])
     new = round(args.grams / digit)
     if abs(new * digit - args.grams) > digit / 2:

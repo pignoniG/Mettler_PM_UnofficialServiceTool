@@ -22,6 +22,7 @@ and verified against 4 dumps + parameter stickers (PM200, PM3000, PM4600, PM6000
 | 11–26 | weighing-range values (capacity, cal weight, steps …) as 2-byte codes (see §5) |
 | 2E–31 | **SPAN** – factory span factor K (24 bit) + checksum 31 |
 | 32–35 | **UCAL** – user calibration trim (24 bit) + checksum 35; written by the normal CAL key |
+| 2A | **decimals shown in grams** - this is what fixes the display step (3 = 1 mg, 2 = 10 mg, 1 = 0.1 g) |
 | 36–3D | configuration (menu settings) |
 | 3E–67 | **cell block = the 21 sticker lines**; checksum byte 67 |
 | 68 | type check: `0x60 | code`, code (3 bit) derived from bytes 16, 21–24 (firmware 0xB233) |
@@ -99,6 +100,9 @@ step = [1,2,5,10,20,50,100,200][(b1>>4)&7]; internal value ×8 (multiplier table
 indexed by byte 0x14 bits 4-6) — i.e. **8 internal counts per displayed digit**. Routine 0xB8C8 would
 additionally multiply by the service factor, but only when ROM byte 0x8009 bit 7 = 0; in the standard
 cassette 0x8009 = 0xFF, so it does not (see §7).
+The display step in grams is **10^-(byte 0x2A)**, so capacity and calibration weight follow from the
+type data alone - no table of models is needed, and types that share a model code (the PM6000 and the
+PJ6000 are both 0x60, at 6100 g and 6000 g) come out right.
 Pair 15/16 = capacity in digits (PM200: 210090 = 210 g in mg + 90 d overload), 25/26 = calibration weight
 (PM200 100000 mg, PM4600 100000 ×10 mg, PM6000 20000 ×0.1 g), step of 11/12 = the manual's "Service Factor".
 

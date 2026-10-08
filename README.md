@@ -96,7 +96,8 @@ python3 tools/pm_eeprom.py sticker in.BIN out.BIN 44730 984960 ... (21 values)
 python3 tools/pm_eeprom.py fix     in.BIN out.BIN
 ```
 
-`--capacity <g>` tells the tool the nominal capacity when the balance type isn't in its table;
+`--capacity <g>` overrides the display step, which is normally read from the EEPROM itself
+(needed only for types whose base unit is not the gram, such as the carat models);
 `--raw-per-g <n>` overrides the estimated gram-to-count scale (see *Accuracy of the estimates*).
 
 ## How the balance uses these numbers
@@ -150,7 +151,8 @@ The temperature scale of 2000 counts per degC comes from a worked example in the
 
 ## What is known and what isn't
 
-Verified against four balances: all four checksums, the complete sticker encoding (rebuilding the cell
+Verified against five balances - PM200, PM3000, PM4600, PM6000 and a PJ6000, so the J series uses
+the same layout as the M series: all four checksums, the complete sticker encoding (rebuilding the cell
 block from a sticker reproduces the original dump byte for byte), the type data encoding, and the
 weighing formula as traced in the firmware.
 
