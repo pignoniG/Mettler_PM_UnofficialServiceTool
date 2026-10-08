@@ -35,6 +35,12 @@ it does not modify balance firmware.**
 
 Every write recomputes all four block checksums and keeps the byte order of the file you opened.
 
+## Example dumps
+
+[`examples/`](examples/) holds the four factory EEPROMs this work was based on - PM200, PM3000, PM4600
+and PM6000 - together with the numbers printed on their parameter stickers. Use them as reference data,
+or as the template when programming a blank EEPROM for the same model.
+
 ## Requirements
 
 Python 3.8 or newer. No third-party packages - the GUI uses tkinter from the standard library.
