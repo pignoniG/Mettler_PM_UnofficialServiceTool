@@ -15,6 +15,10 @@ Everything here was reverse-engineered from the V10.45 cassette firmware and ver
 balances (PM200, PM3000, PM4600, PM6000) and their stickers. **The tool only ever touches the EEPROM;
 it does not modify balance firmware.**
 
+**[EEPROM_MAP.md](EEPROM_MAP.md) documents the EEPROM itself** - the memory map, the checksums, the
+byte order, the weighing formula and the meaning of every stored value. Read that if you want to
+understand your dump rather than just edit it.
+
 > **Working on a balance is your responsibility.** These are measuring instruments. Save your original
 > dump before writing anything, and keep it. If your instrument is legal-for-trade or otherwise certified,
 > changing these parameters invalidates its verification - don't do it unless you are entitled to.
