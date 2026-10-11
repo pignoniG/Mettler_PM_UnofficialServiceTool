@@ -45,6 +45,8 @@ understand your dump rather than just edit it.
   fine range - on a PM4600 that means 10 mg up to 4100 g, which is the PM4000 specification.
 - **Switch between the normal and certified operating modes** (the code the balance shows as the last
   pair of its software number at power-up).
+- **Enable or disable the calibration/configuration lock** - the cassette jumper only has any effect
+  when the EEPROM says so, which is why it appears dead on a normal balance.
 - **Recompute the checksums** of a dump you edited by other means.
 
 Every write recomputes all four block checksums and keeps the byte order of the file you opened.
@@ -102,6 +104,7 @@ python3 tools/pm_eeprom.py tczero  in.BIN out.BIN --g-per-c 0.001
 python3 tools/pm_eeprom.py calweight in.BIN out.BIN --grams 2000
 python3 tools/pm_eeprom.py fine    in.BIN out.BIN
 python3 tools/pm_eeprom.py mode    in.BIN out.BIN --code 00
+python3 tools/pm_eeprom.py blocking in.BIN out.BIN --state on
 python3 tools/pm_eeprom.py set     in.BIN out.BIN L0=2253 S1=-182000
 python3 tools/pm_eeprom.py sticker in.BIN out.BIN 44730 984960 ... (21 values)
 python3 tools/pm_eeprom.py fix     in.BIN out.BIN
