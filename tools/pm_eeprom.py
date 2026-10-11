@@ -20,6 +20,7 @@ Usage:
   pm_eeprom.py calweight IN.BIN OUT.BIN --grams 2000
   pm_eeprom.py mode   IN.BIN OUT.BIN --code 00     (operating mode / certification)
   pm_eeprom.py blocking IN.BIN OUT.BIN --state on (let the cassette jumper lock calibration)
+  pm_eeprom.py config IN.BIN OUT.BIN --source OLD.BIN  (carry the customer's menu settings over)
   pm_eeprom.py fine   IN.BIN OUT.BIN     (DeltaRange: fine display increment over the whole range)
   pm_eeprom.py fix    IN.BIN OUT.BIN                        (only recompute checksums)
 """
@@ -169,6 +170,14 @@ def cmd_info(x, swapped, args):
         print(f"  linearity bow (L0) at half capacity after 2-point cal: "
               f"{-g24(x,0x5E)*Rf*Rf/4/2**48/R*1000:+.2f} mg (estimate)")
     print()
+    print("User settings (menu and configuration file), bytes 00-03:")
+    for b, mask, val, name in user_settings(x):
+        extra = ""
+        if name.startswith("readability"):
+            extra = f"  -> step {STEP[val]} d = {STEP[val] * digit:g} g" if digit else ""
+        print(f"  [{b:02X}] mask {mask:02X} = {val}   {name}{extra}")
+    print(f"  [03] unit 1 = {x[3] & 0x0F}, unit 2 = {x[3] >> 4}")
+    print()
     print("Sticker values (lines 00-20, low 16 bits; check nibble not computed):")
     print("  " + " ".join(f"{i:02d}:x{w:04X}" for i, w in enumerate(sticker_words(x))))
 
@@ -231,8 +240,44 @@ def mode_name(code):
     return f"unknown ({code:02X})"
 
 
+# user settings, written back to the EEPROM after every menu change (firmware 0x8AE7)
+USER_FIELDS = [            # (byte, mask, shift, name)   names marked ? are inferred from behaviour
+    (0x00, 0x03, 0, "weighing process adapter? (4 settings)"),
+    (0x00, 0x0C, 2, "vibration adapter? (3 settings)"),
+    (0x00, 0x30, 4, "stability detector ASD? (4 settings)"),
+    (0x00, 0x40, 6, "autozero?"),
+    (0x00, 0x80, 7, "DeltaDisplay?"),
+    (0x01, 0x07, 0, "baud rate (8 settings)"),
+    (0x01, 0x18, 3, "parity? (4 settings)"),
+    (0x01, 0x20, 5, "toggle"),
+    (0x01, 0xC0, 6, "pause/handshake? (4 settings)"),
+    (0x02, 0x01, 0, "toggle"),
+    (0x02, 0x02, 1, "toggle"),
+    (0x02, 0x04, 2, "toggle"),
+    (0x02, 0x08, 3, "toggle"),
+    (0x02, 0x10, 4, "toggle"),
+    (0x02, 0xE0, 5, "readability (display step multiplier)"),
+]
+USER_BLOCKS = ((0x00, 4),)   # the only area a menu change rewrites (firmware 0x8AE7); the block at
+                             # 0x6C-0x7F is written only during a type load and is not menu data
+
+
+def user_settings(x):
+    for b, mask, sh, name in USER_FIELDS:
+        yield b, mask, (x[b] & mask) >> sh, name
+
+
 def blocking_on(x):
     return bool(x[0x2B] & 0x04)
+
+
+def cmd_config(x, args):
+    """copy the customer's settings over from another dump (the service manual's
+    'record the customer's configuration' step, done by file)"""
+    src, _, _ = load(args.source)
+    for a, n in USER_BLOCKS:
+        print(f"copying bytes {a:02X}..{a + n - 1:02X}: {x[a:a+n].hex(' ')} -> {src[a:a+n].hex(' ')}")
+        x[a:a + n] = src[a:a + n]
 
 
 def cmd_blocking(x, args):
@@ -328,6 +373,8 @@ def main():
                                  "11-19/21-29 national, 50-FF special")
     mk("blocking").add_argument("--state", choices=("on", "off"), required=True,
                                 help="let the cassette jumper block calibration and configuration")
+    mk("config").add_argument("--source", required=True,
+                              help="dump to copy the user settings from")
     mk("fix")
     args = p.parse_args()
     try:
@@ -338,7 +385,7 @@ def main():
         return cmd_info(x, swapped, args)
     try:
         {"set": cmd_set, "lin": cmd_lin, "tcspan": cmd_tcspan, "tczero": cmd_tczero,
-         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode, "blocking": cmd_blocking,
+         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode, "blocking": cmd_blocking, "config": cmd_config,
          "fix": lambda x, a: None}[args.cmd](x, args)
     except PmError as e:
         sys.exit(str(e))

@@ -20,7 +20,7 @@ document are V10.45 unless stated.
 
 | Addr | Content |
 |---|---|
-| 00–03 | misc config (not checksummed) |
+| 00–03 | **user settings** - everything the customer sets through the menu and the configuration file. These four bytes are the only ones a menu change writes back (firmware 0x8AE7), so copying them carries a customer's configuration to another EEPROM (`pm_eeprom.py config`). Not checksummed. See §9 |
 | 04–2D | **type block** (from type cassette); checksum byte 2D |
 | 05 | model code (0x20 PM200, 0x30 PM3000, 0x46 PM4600, 0x60 PM6000) |
 | 08 | **operating mode / certification code**: 00 normal, 10 certified with blockable calibration and configuration, 20 certified with calibration facility, 11–19 / 21–29 national variants, 50–FF special units. Shown at power-up as the last pair of the software number (10.45.**10**), and the firmware branches on 14/24 (France) and on a high nibble of 9 (special unit) |
@@ -34,7 +34,7 @@ document are V10.45 unless stated.
 | 3A–3D | optional **user-defined calibration weight** + checksum 3D; all zeros when unused, and the firmware only validates it when that menu option is on - so leave it alone |
 | 3E–67 | **cell block = the 21 sticker lines**; checksum byte 67 |
 | 68 | type check: `0x60 | code`, code (3 bit) derived from bytes 16, 21–24 (firmware 0xB233) |
-| 6C–7F | other/config |
+| 6C–7F | written only during a type load; contents not identified (differs per unit) |
 
 **Checksum** (routine 0xCBA3): `(0xA6 + Σ bytes of block) mod 256 == 0`, last byte of each block is the
 check byte. Wrong cell/type/span checksum → error at power-up (internal error code 6); wrong 0x68 → code 8/9.
@@ -180,3 +180,37 @@ their normal resolution. The real bounds are, in order:
 
 A finer step is therefore not a single byte but a coordinated rescale: decimals (0x2A), every type value,
 the base increment, the multiplier byte 0x14 and SPAN/UCAL together.
+
+## 9. User settings (bytes 00-03)
+
+The menu engine (firmware 0xDD09) defines each configuration item as a byte, a bit mask and a count
+of options, and the user manual lists the items with their option counts - which is how the fields
+below were matched. The register holds the highest index, so a count of 7 means eight settings.
+
+| Byte | Mask | Settings | Item |
+|---|---|---|---|
+| 00 | 03 | 4 | weighing process adapter (fine dispensing / universal / absolute / animal) |
+| 00 | 0C | 3 used of 4 | vibration adapter |
+| 00 | 30 | 4 | stability detector (ASD) |
+| 00 | 40 | 2 | autozero |
+| 00 | 80 | 2 | DeltaDisplay |
+| 01 | 07 | 8 | baud rate |
+| 01 | 18 | 4 | parity |
+| 01 | 20 | 2 | toggle, not identified |
+| 01 | C0 | 4 | pause / handshake |
+| 02 | 01, 02, 04, 08, 10 | 2 each | five toggles (print command, certification symbol, …) |
+| 02 | E0 | 7 | **readability** - index into the step table 1, 2, 5, 10, 20, 50, 100 |
+| 03 | 0F / F0 | - | **unit 1** (low nibble) and **unit 2** (high nibble) |
+
+**How solid each one is.** The byte, mask and number of settings come straight from the menu engine, so
+the *field map* is certain. Two items are proven independently: the readability field is read by the
+weighing code at 0x8688 through the same step table, and the unit nibbles are written at 0xE4AC/0xE4D2
+and loaded into the unit variable at 0x82DA. Autozero (0x00 bit 6, used in the weighing path at 0x85A5)
+and DeltaDisplay (0x00 bit 7, which gates the digit suppression at 0xBD47) are well supported. The two
+adapters are identified by behaviour - bits 0-1 drive the animal-weighing and display-suppression paths,
+bits 2-3 select the filter parameter set at 0xCB27 - and are marked with a `?` in the tool.
+
+**What is not established** is the order of the options within each field, i.e. which stored value means
+"normal" rather than "unstable". Decoding the five reference dumps under the manual's listed order gives
+implausible results (every balance on 300 baud), so the tool prints the raw value rather than a name.
+Settling it needs a balance to be read, changed one menu step, and read again.
