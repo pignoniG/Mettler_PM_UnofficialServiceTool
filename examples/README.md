@@ -1,11 +1,11 @@
 # Example dumps
 
-Four factory EEPROMs read from working balances, with the numbers printed on their parameter stickers.
+Five factory EEPROMs read from working balances, with the numbers printed on their parameter stickers.
 They serve two purposes: as reference data for anyone decoding their own dump, and as **templates** when
 programming a blank EEPROM - start from the dump of the same model, then load your own sticker over it
 (see the main README).
 
-All four files are in the byte order produced by the programmer they were read with (word bytes swapped
+All files are in the byte order produced by the programmer they were read with (word bytes swapped
 relative to the balance's processor); the tool detects that on its own.
 
 Each dump passes all four checksums, and typing its sticker values into the tool reproduces the cell
@@ -146,3 +146,38 @@ ID 850932
 19: 392088
 20: 129535
 ```
+
+## PJ6000 - `PJ6000.BIN`
+
+ID **713153** · capacity 6009 g · display step 0.1 g · calibration weight 2000 g
+
+Span TC -343 ppm/°C · L0 47709 · SPAN 648729 · UCAL 101
+
+Parameter sticker:
+
+```
+ID 713153
+00: 44730
+01: 984960
+02: 925500
+03: 328860
+04: 716846
+05: 524548
+06: 525646
+07: 1045651
+08: 364799
+09: 393182
+10: 132131
+11: 3072
+12: 786188
+13: 794569
+14: 482813
+15: 262181
+16: 47709
+17: 971008
+18: 655359
+19: 1038133
+20: 291327
+```
+  
+  *A J-series balance, confirming that the J series uses the same EEPROM layout as the M series. Its sticker header carries an `E` in the dashed line, as the PM6000's does.*

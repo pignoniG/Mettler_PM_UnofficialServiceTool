@@ -41,8 +41,8 @@ Every write recomputes all four block checksums and keeps the byte order of the 
 
 ## Example dumps
 
-[`examples/`](examples/) holds the four factory EEPROMs this work was based on - PM200, PM3000, PM4600
-and PM6000 - together with the numbers printed on their parameter stickers. Use them as reference data,
+[`examples/`](examples/) holds the five factory EEPROMs this work was based on - PM200, PM3000, PM4600,
+PM6000 and a PJ6000 - together with the numbers printed on their parameter stickers. Use them as reference data,
 or as the template when programming a blank EEPROM for the same model.
 
 ## Requirements
@@ -158,8 +158,12 @@ weighing formula as traced in the firmware.
 
 Not solved: the **check digit** in the printed sticker numbers. Each printed value is 20 bits - a 4-bit
 check digit plus the 16-bit EEPROM word - and the standard firmware never computes it, so the tool reads
-stickers but cannot print a complete new one. If you have a dump plus its sticker for a model not listed
-here, that's exactly the data needed to crack it; please open an issue.
+stickers but cannot print a complete new one. With five stickers (105 digits) these families are ruled
+out: any affine function over Z16 of the word's bits or nibbles, the previous check digit, the type-check
+code, the line number and the balance ID - all are infeasible even modulo 2 - and the top or bottom nibble
+of a CRC-16 under the usual polynomials, for every initial value and both bit orders. Lines 00 and 01,
+whose words are identical on every balance, show the digit depending on the type-check code in byte 0x68,
+so the scheme is seeded from it. More stickers would help; the algorithm itself lives in the ServicePac.
 
 Everything was derived from V10.45. Other V10.xx versions very probably use the same layout; that has not
 been tested.
