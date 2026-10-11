@@ -19,6 +19,7 @@ Usage:
   pm_eeprom.py sticker IN.BIN OUT.BIN V00 V01 ... V20     (write cell block from sticker)
   pm_eeprom.py calweight IN.BIN OUT.BIN --grams 2000
   pm_eeprom.py mode   IN.BIN OUT.BIN --code 00     (operating mode / certification)
+  pm_eeprom.py blocking IN.BIN OUT.BIN --state on (let the cassette jumper lock calibration)
   pm_eeprom.py fine   IN.BIN OUT.BIN     (DeltaRange: fine display increment over the whole range)
   pm_eeprom.py fix    IN.BIN OUT.BIN                        (only recompute checksums)
 """
@@ -141,6 +142,7 @@ def cmd_info(x, swapped, args):
     print(f"model code  [05]   : 0x{x[5]:02X}    type-check [68]: 0x{x[0x68]:02X}")
     print(f"ID          [0E-10]: {x[0x0E]:02X}{x[0x0F]:02X}{x[0x10]:02X}")
     print(f"mode        [08]   : {x[0x08]:02X}  {mode_name(x[0x08])}")
+    print(f"cal/menu block [2B]: {'on - the cassette jumper decides' if blocking_on(x) else 'off - jumper ignored'}")
     for name, (a, n) in BLOCKS.items():
         print(f"checksum {name:8s}: {'OK' if ck(x, a, n) == 0 else 'BAD'}  ({a:02X}..{a + n - 1:02X})")
     cap, _ = type_value(x, x[0x15], x[0x16])
@@ -229,6 +231,20 @@ def mode_name(code):
     return f"unknown ({code:02X})"
 
 
+def blocking_on(x):
+    return bool(x[0x2B] & 0x04)
+
+
+def cmd_blocking(x, args):
+    """byte 0x2B bit 2: whether the cassette jumper can block calibration and configuration"""
+    old = blocking_on(x)
+    new = args.state == "on"
+    x[0x2B] = (x[0x2B] | 0x04) if new else (x[0x2B] & ~0x04)
+    print(f"calibration/configuration blocking: {'on' if old else 'off'} -> {'on' if new else 'off'}")
+    print("on  = the cassette jumper decides whether calibration and the menu are allowed\n"
+          "off = always allowed, the jumper is ignored")
+
+
 def cmd_mode(x, args):
     """operating mode / certification code, byte 08 - shown at power-up as the last pair of the
     software number (e.g. 10.45.10)."""
@@ -310,6 +326,8 @@ def main():
     mk("mode").add_argument("--code", required=True,
                             help="operating mode byte in hex: 00 normal, 10/20 certified, "
                                  "11-19/21-29 national, 50-FF special")
+    mk("blocking").add_argument("--state", choices=("on", "off"), required=True,
+                                help="let the cassette jumper block calibration and configuration")
     mk("fix")
     args = p.parse_args()
     try:
@@ -320,7 +338,7 @@ def main():
         return cmd_info(x, swapped, args)
     try:
         {"set": cmd_set, "lin": cmd_lin, "tcspan": cmd_tcspan, "tczero": cmd_tczero,
-         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode,
+         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode, "blocking": cmd_blocking,
          "fix": lambda x, a: None}[args.cmd](x, args)
     except PmError as e:
         sys.exit(str(e))

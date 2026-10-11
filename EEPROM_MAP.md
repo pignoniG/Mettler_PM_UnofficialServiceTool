@@ -26,6 +26,7 @@ document are V10.45 unless stated.
 | 08 | **operating mode / certification code**: 00 normal, 10 certified with blockable calibration and configuration, 20 certified with calibration facility, 11–19 / 21–29 national variants, 50–FF special units. Shown at power-up as the last pair of the software number (10.45.**10**), and the firmware branches on 14/24 (France) and on a high nibble of 9 (special unit) |
 | 0E–10 | **ID number, BCD** (= "ID" line on sticker, e.g. 69 43 37) |
 | 11–26 | weighing-range values (capacity, cal weight, steps …) as 2-byte codes (see §5) |
+| 2B | certified-behaviour flags. **Bit 2 = calibration/configuration blocking**: when it is set the cassette jumper (bit 7 of the scanned switch byte at XRAM 70D1) decides whether calibration and the menu are allowed; when it is clear both are always allowed and *the jumper does nothing*. Routine 0x9996 returns that decision, and it is called from the calibration path (0x95AD) and the configuration entry (0x8E9F). Certified PM3000 has 0x85 here, the normal units 0x00 |
 | 2E–31 | **SPAN** – factory span factor K (24 bit) + checksum 31 |
 | 32–35 | **UCAL** – user calibration trim (24 bit) + checksum 35; written by the normal CAL key |
 | 2A | **decimals shown in grams** - this is what fixes the display step (3 = 1 mg, 2 = 10 mg, 1 = 0.1 g) |
