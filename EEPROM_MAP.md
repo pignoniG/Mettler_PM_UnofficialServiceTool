@@ -3,6 +3,11 @@
 Reverse-engineered from firmware **ME-34172 V10.45 "Standard"** (8051, cassette ROM mapped at 0x8000)
 and verified against 4 dumps + parameter stickers (PM200, PM3000, PM4600, PM6000).
 
+**Firmware independence.** Verified on both program-cassette families: V10.45 (M series) and V20.45
+(J series). The two images share only 28% of their bytes and all addresses differ, but the EEPROM code
+is the same - driver, checksum, block boundaries and the cell-correction maths. Addresses quoted in this
+document are V10.45 unless stated.
+
 ## 1. Hardware / byte order
 
 * 93C46 in x16 mode, bit-banged on P1: **CS = P1.2, SK = P1.0, DI = P1.1, DO = P1.7** (driver at 0xCE05–0xCF50).
@@ -24,6 +29,7 @@ and verified against 4 dumps + parameter stickers (PM200, PM3000, PM4600, PM6000
 | 32–35 | **UCAL** – user calibration trim (24 bit) + checksum 35; written by the normal CAL key |
 | 2A | **decimals shown in grams** - this is what fixes the display step (3 = 1 mg, 2 = 10 mg, 1 = 0.1 g) |
 | 36–3D | configuration (menu settings) |
+| 3A–3D | optional **user-defined calibration weight** + checksum 3D; all zeros when unused, and the firmware only validates it when that menu option is on - so leave it alone |
 | 3E–67 | **cell block = the 21 sticker lines**; checksum byte 67 |
 | 68 | type check: `0x60 | code`, code (3 bit) derived from bytes 16, 21–24 (firmware 0xB233) |
 | 6C–7F | other/config |

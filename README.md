@@ -1,8 +1,8 @@
 # Mettler AM/PM parameter EEPROM tool
 
-Read, decode and edit the parameter EEPROM (NMC93C46) of Mettler-Toledo **AM/PM/CM/J series**
-precision balances - the M-series instruments of the early 1990s, running the V10.xx "Standard"
-program cassette.
+Read, decode and edit the parameter EEPROM (NMC93C46) of Mettler-Toledo **AM/PM/CM and PJ/AJ/CJ series**
+precision balances - the M- and J-series instruments of the early 1990s, running the V10.xx or V20.xx
+"Standard" program cassette.
 
 These balances keep their measuring-cell parameters - span, linearity, temperature compensation,
 balance type and the user calibration trim - in a 128-byte serial EEPROM on the main board. The same
@@ -11,9 +11,17 @@ with a Mettler **ServicePac** adjustment cassette, which is almost impossible to
 lets you decode that EEPROM, change the parameters and write it back with correct checksums, using
 nothing more than an EEPROM programmer.
 
-Everything here was reverse-engineered from the V10.45 cassette firmware and verified against four
-balances (PM200, PM3000, PM4600, PM6000) and their stickers. **The tool only ever touches the EEPROM;
-it does not modify balance firmware.**
+Everything here was reverse-engineered from the V10.45 cassette firmware and verified against five
+balances (PM200, PM3000, PM4600, PM6000, PJ6000) and their stickers. **The tool only ever touches the
+EEPROM; it does not modify balance firmware.**
+
+**The J series works too.** PJ/AJ/CJ balances run their own firmware - V20.xx rather than V10.xx, for a
+different display - but they store their parameters the same way, so the tool applies unchanged. That is
+not an assumption: the PJ6000 dump in `examples/` decodes correctly and its sticker matches, and in the
+V20.45 cassette image, which shares only 28% of its bytes with V10.45 and has everything relocated, the
+EEPROM code is the same - the same 93C46 driver, the same `0xA6 + sum == 0` checksum over the same four
+blocks, the same mirror address, and a cell-correction routine that is instruction-for-instruction the
+same algorithm. Since the tool works on the EEPROM alone, the firmware difference does not reach it.
 
 **[EEPROM_MAP.md](EEPROM_MAP.md) documents the EEPROM itself** - the memory map, the checksums, the
 byte order, the weighing formula and the meaning of every stored value. Read that if you want to
