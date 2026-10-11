@@ -18,6 +18,7 @@ Usage:
   pm_eeprom.py tczero IN.BIN OUT.BIN --g-per-c G [--capacity G]
   pm_eeprom.py sticker IN.BIN OUT.BIN V00 V01 ... V20     (write cell block from sticker)
   pm_eeprom.py calweight IN.BIN OUT.BIN --grams 2000
+  pm_eeprom.py mode   IN.BIN OUT.BIN --code 00     (operating mode / certification)
   pm_eeprom.py fine   IN.BIN OUT.BIN     (DeltaRange: fine display increment over the whole range)
   pm_eeprom.py fix    IN.BIN OUT.BIN                        (only recompute checksums)
 """
@@ -53,6 +54,8 @@ CELL = {  # name: (addr, description)
 }
 OTHER = {"SPAN": (0x2E, "factory span factor K (weight = W*K/2^23)"),
          "UCAL": (0x32, "user calibration trim, added to K (max SPAN/32)")}
+MODES = {0x00: "normal", 0x10: "certified, calibration and configuration blockable",
+         0x20: "certified, calibration possible"}   # 11-19 / 21-29 national, 50-FF special units
 T_COUNTS_PER_C = 2000                # temperature reading counts per degC (service manual)
 
 # type-parameter decoding (firmware routine B845)
@@ -137,6 +140,7 @@ def cmd_info(x, swapped, args):
     print(f"byte order in file : {'swapped (programmer LE)' if swapped else '8051 order'}")
     print(f"model code  [05]   : 0x{x[5]:02X}    type-check [68]: 0x{x[0x68]:02X}")
     print(f"ID          [0E-10]: {x[0x0E]:02X}{x[0x0F]:02X}{x[0x10]:02X}")
+    print(f"mode        [08]   : {x[0x08]:02X}  {mode_name(x[0x08])}")
     for name, (a, n) in BLOCKS.items():
         print(f"checksum {name:8s}: {'OK' if ck(x, a, n) == 0 else 'BAD'}  ({a:02X}..{a + n - 1:02X})")
     cap, _ = type_value(x, x[0x15], x[0x16])
@@ -215,6 +219,33 @@ def encode_pair(value, step_idx, flag):
     raise PmError(f"value {value} cannot be encoded as a type value")
 
 
+def mode_name(code):
+    if code in MODES:
+        return MODES[code]
+    if 0x11 <= code <= 0x19 or 0x21 <= code <= 0x29:
+        return f"certified, national variant {code:02X}"
+    if code >= 0x50:
+        return f"special weighing unit {code:02X}"
+    return f"unknown ({code:02X})"
+
+
+def cmd_mode(x, args):
+    """operating mode / certification code, byte 08 - shown at power-up as the last pair of the
+    software number (e.g. 10.45.10)."""
+    old = x[0x08]
+    try:
+        new = int(args.code, 16)
+    except ValueError:
+        raise PmError("give the code as two hex digits, e.g. 00 or 10")
+    if not 0 <= new <= 0xFF:
+        raise PmError("code must be a single byte")
+    x[0x08] = new
+    print(f"operating mode: {old:02X} ({mode_name(old)}) -> {new:02X} ({mode_name(new)})")
+    if (old == 0) != (new == 0):
+        print("NOTE: the certified calibration weight usually differs from the normal one "
+              "(see the service manual); change it with 'calweight' if needed.")
+
+
 def cmd_calweight(x, args):
     u, digit = units(x, args.capacity)
     old, step = type_value(x, x[0x25], x[0x26])
@@ -276,6 +307,9 @@ def main():
     mk("fine")
     mk("calweight").add_argument("--grams", type=float, required=True,
                                  help="calibration weight to store, in grams")
+    mk("mode").add_argument("--code", required=True,
+                            help="operating mode byte in hex: 00 normal, 10/20 certified, "
+                                 "11-19/21-29 national, 50-FF special")
     mk("fix")
     args = p.parse_args()
     try:
@@ -286,7 +320,7 @@ def main():
         return cmd_info(x, swapped, args)
     try:
         {"set": cmd_set, "lin": cmd_lin, "tcspan": cmd_tcspan, "tczero": cmd_tczero,
-         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight,
+         "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode,
          "fix": lambda x, a: None}[args.cmd](x, args)
     except PmError as e:
         sys.exit(str(e))

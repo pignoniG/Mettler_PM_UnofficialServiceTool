@@ -363,6 +363,7 @@ class App(ttk.Frame):
         cap_g = self.cap()
         out.append(f"model code [05] 0x{x[5]:02X}      ID {x[0x0E]:02X}{x[0x0F]:02X}{x[0x10]:02X}"
                    f"      type check [68] 0x{x[0x68]:02X}")
+        out.append(f"mode [08] 0x{x[0x08]:02X}  {pm.mode_name(x[0x08])}")
         marks = []
         for name, (a, n) in pm.BLOCKS.items():
             ok = pm.ck(x, a, n) == 0
