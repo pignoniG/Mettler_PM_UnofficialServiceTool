@@ -23,6 +23,7 @@ document are V10.45 unless stated.
 | 00–03 | misc config (not checksummed) |
 | 04–2D | **type block** (from type cassette); checksum byte 2D |
 | 05 | model code (0x20 PM200, 0x30 PM3000, 0x46 PM4600, 0x60 PM6000) |
+| 08 | **operating mode / certification code**: 00 normal, 10 certified with blockable calibration and configuration, 20 certified with calibration facility, 11–19 / 21–29 national variants, 50–FF special units. Shown at power-up as the last pair of the software number (10.45.**10**), and the firmware branches on 14/24 (France) and on a high nibble of 9 (special unit) |
 | 0E–10 | **ID number, BCD** (= "ID" line on sticker, e.g. 69 43 37) |
 | 11–26 | weighing-range values (capacity, cal weight, steps …) as 2-byte codes (see §5) |
 | 2E–31 | **SPAN** – factory span factor K (24 bit) + checksum 31 |
