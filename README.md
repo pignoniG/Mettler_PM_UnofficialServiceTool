@@ -53,6 +53,40 @@ understand your dump rather than just edit it.
 
 Every write recomputes all four block checksums and keeps the byte order of the file you opened.
 
+## Changing the display step (experimental)
+
+`tools/rescale.py` makes the balance's base digit finer - its display step is 10^-(byte 0x2A) grams,
+and every type value is expressed in those steps, so the change touches the decimals, every weight-valued
+type pair, the internal multiplier and the span factor together. Afterwards the step itself is a menu
+item (readability), so 1, 2, 5, 10 x the new digit are all selectable from the front panel.
+
+```bash
+python3 tools/rescale.py in.BIN out.BIN --digit-mg 1 --dry-run   # show the plan, write nothing
+```
+
+**This is the least proven thing here.** It has been run on exactly one balance: a PM4600 taken from a
+10 mg digit to a 1 mg digit displaying 5 mg steps, which works, calibrates and weighs. No other type has
+been tried. Specifically:
+
+- **The A/D sets the real limit, not the format.** Divide your wanted step by the balance's raw-count
+  size (`info` prints the counts per gram): fewer than about five counts per step and the last digit is
+  quantisation, not resolution. The script warns. On a PM4600 one count is 0.65 mg, so 5 mg is honest
+  and 1 mg is marginal; on a PM200 one count is 0.03 mg and 0.5 mg is comfortable.
+- **And the cell sets a limit below that** - repeatability, cornerload and drift are all far coarser
+  than the new digit, so extra resolution shows stability, not better mass values.
+- **Pair 0x17 is not scaled**, because it reads 900 display steps on all five reference balances and so
+  appears to be specified in steps rather than grams. Its meaning in grams therefore changes by the
+  rescale factor. It is compared against the live weight, so if zero or taring misbehaves afterwards,
+  that is the first suspect - `--scale-17` flips the choice.
+- **Two pairs remain unidentified** in general (0x17 and 0x1D); the scaling rule came from comparing how
+  each value behaves across the five reference dumps, not from tracing every use in the firmware.
+- The 24-bit internal value and the span factor both have to stay under 8388607; the script refuses when
+  no multiplier satisfies both, which is why a PM4600 cannot reach 0.5 mg at all.
+
+Test it in two steps: program the rescaled EEPROM, set readability to reproduce the balance's original
+step, and confirm a known weight reads exactly as before - that checks the rescale arithmetic on its own.
+Only then select the finer step. Keep the original dump; it is the way back.
+
 ## Example dumps
 
 [`examples/`](examples/) holds the five factory EEPROMs this work was based on - PM200, PM3000, PM4600,
