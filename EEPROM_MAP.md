@@ -33,7 +33,7 @@ document are V10.45 unless stated.
 | 36–3D | configuration (menu settings) |
 | 3A–3D | optional **user-defined calibration weight** + checksum 3D; all zeros when unused, and the firmware only validates it when that menu option is on - so leave it alone |
 | 3E–67 | **cell block = the 21 sticker lines**; checksum byte 67 |
-| 68 | type check: `0x60 | code`, code (3 bit) derived from bytes 16, 21–24 (firmware 0xB233) |
+| 68 | **type check**: `0x60 \| code`, where the 3-bit code is recomputed at power-up by routine 0xB233 from byte 0x16 (low 2 bits) and bit 7 of bytes 0x21–0x24. A mismatch stops the balance with **error 9**, and an upper part other than 0x60 gives error 8. So any change to the capacity pair or to the secondary-range flags must be followed by recomputing this byte - `pm_eeprom.py` does it automatically |
 | 6C–7F | written only during a type load; contents not identified (differs per unit) |
 
 **Checksum** (routine 0xCBA3): `(0xA6 + Σ bytes of block) mod 256 == 0`, last byte of each block is the
