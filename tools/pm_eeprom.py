@@ -99,7 +99,29 @@ def s24(x, a, v):
     x[a:a + 3] = v.to_bytes(3, "little", signed=True)
 
 
+def type_check(x):
+    """the 3-bit code the firmware recomputes from the type data at power-up (routine 0xB233)
+    and compares with byte 0x68; a mismatch stops the balance with error 9"""
+    b = x[0x16] & 3
+    for i, bit in zip(range(0x21, 0x25), (7, 6, 5, 4)):
+        if x[i] & 0x80:
+            b |= 1 << bit
+    if (b & 0xF0) ^ 0x50:
+        b |= 4
+    return b & 7
+
+
+def fix_type_check(x):
+    """byte 0x68 must follow the type data; any change to the capacity pair or to the
+    secondary-range flags changes it"""
+    want = 0x60 | type_check(x)
+    if x[0x68] != want:
+        print(f"type-check byte 0x68: {x[0x68]:02X} -> {want:02X} (follows the type data)")
+        x[0x68] = want
+
+
 def fix_checksums(x):
+    fix_type_check(x)
     for a, n in BLOCKS.values():
         last = a + n - 1
         x[last] = (-(CK_SEED + sum(x[a:last]))) & 0xFF
@@ -140,7 +162,9 @@ def raw_counts_per_g(x, capacity_g=None):
 # ---------------------------------------------------------------- commands
 def cmd_info(x, swapped, args):
     print(f"byte order in file : {'swapped (programmer LE)' if swapped else '8051 order'}")
-    print(f"model code  [05]   : 0x{x[5]:02X}    type-check [68]: 0x{x[0x68]:02X}")
+    want = 0x60 | type_check(x)
+    print(f"model code  [05]   : 0x{x[5]:02X}    type-check [68]: 0x{x[0x68]:02X} "
+          f"{'OK' if x[0x68] == want else f'MISMATCH - should be {want:02X}, the balance stops with error 9'}")
     print(f"ID          [0E-10]: {x[0x0E]:02X}{x[0x0F]:02X}{x[0x10]:02X}")
     print(f"mode        [08]   : {x[0x08]:02X}  {mode_name(x[0x08])}")
     print(f"cal/menu block [2B]: {'on - the cassette jumper decides' if blocking_on(x) else 'off - jumper ignored'}")
