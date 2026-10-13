@@ -22,4 +22,3 @@ __pycache__/
 # firmware analysis notes - keep local unless you decide to publish them
 FIRMWARE_NOTES.md
 tools/usermanual.txt
-tools/rescale.py
