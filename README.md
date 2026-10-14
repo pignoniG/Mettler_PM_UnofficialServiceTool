@@ -68,10 +68,13 @@ python3 tools/rescale.py in.BIN out.BIN --digit-mg 1 --dry-run   # show the plan
 10 mg digit to a 1 mg digit displaying 5 mg steps, which works, calibrates and weighs. No other type has
 been tried. Specifically:
 
-- **The A/D sets the real limit, not the format.** Divide your wanted step by the balance's raw-count
-  size (`info` prints the counts per gram): fewer than about five counts per step and the last digit is
-  quantisation, not resolution. The script warns. On a PM4600 one count is 0.65 mg, so 5 mg is honest
-  and 1 mg is marginal; on a PM200 one count is 0.03 mg and 0.5 mg is comfortable.
+- **The A/D sets the real limit, not the format.** The converter accumulates over the cycle count in
+  RAM 32h (24 in stock firmware) and the result is normalised by 240/32h, so raw values only land on
+  multiples of 10 - one real A/D count is **10 raw units**. On a PM4600 that is 6.5 mg, on a PM200
+  0.33 mg. Mettler's own types run **1.5 to 3 A/D counts per display step** (the PM4600's 10 mg display
+  is 1.55, the PM200's 1 mg display is 3.0), so that is the yardstick: below about 1 count per step the
+  last digit moves only because the balance's own noise dithers it, carrying no new information. The
+  script reports the ratio and warns.
 - **And the cell sets a limit below that** - repeatability, cornerload and drift are all far coarser
   than the new digit, so extra resolution shows stability, not better mass values.
 - **Pair 0x17 is not scaled**, because it reads 900 display steps on all five reference balances and so
