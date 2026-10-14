@@ -47,6 +47,10 @@ understand your dump rather than just edit it.
   pair of its software number at power-up).
 - **Enable or disable the calibration/configuration lock** - the cassette jumper only has any effect
   when the EEPROM says so, which is why it appears dead on a normal balance.
+- **Set the display deadband and the stability window** (bytes 0x28 and 0x27). The deadband holds the
+  shown weight until it has moved by more than a set amount; it is about a quarter of a digit from the
+  factory, but it is counted in internal units, so after a finer display step it can make the last digit
+  jump (2 units gave 3 mg jumps on a 1 mg PM4600). `info` warns when that happens.
 - **Read and transfer the customer's settings** - the menu and configuration-file items live in four
   bytes, so a configuration can be carried to another EEPROM instead of being written down by hand.
 - **Recompute the checksums** of a dump you edited by other means.
@@ -83,6 +87,10 @@ been tried. Specifically:
   that is the first suspect - `--scale-17` flips the choice.
 - **Two pairs remain unidentified** in general (0x17 and 0x1D); the scaling rule came from comparing how
   each value behaves across the five reference dumps, not from tracing every use in the firmware.
+- **The display deadband (byte 0x28) is rescaled too**, so it stays the same fraction of a digit; on the
+  PM4600 that takes it from 2 to 0. With no deadband at a 1 mg readability every flicker counts as
+  movement, so taring or calibrating can time out with Err 1; `stability --steps 4` (byte 0x27) or
+  calibrating at a coarser readability gets round it.
 - The 24-bit internal value and the span factor both have to stay under 8388607; the script refuses when
   no multiplier satisfies both, which is why a PM4600 cannot reach 0.5 mg at all.
 
@@ -149,6 +157,8 @@ python3 tools/pm_eeprom.py fine    in.BIN out.BIN
 python3 tools/pm_eeprom.py mode    in.BIN out.BIN --code 00
 python3 tools/pm_eeprom.py blocking in.BIN out.BIN --state on
 python3 tools/pm_eeprom.py config  in.BIN out.BIN --source old.BIN
+python3 tools/pm_eeprom.py deadband in.BIN out.BIN --units 0
+python3 tools/pm_eeprom.py stability in.BIN out.BIN --steps 4
 python3 tools/pm_eeprom.py set     in.BIN out.BIN L0=2253 S1=-182000
 python3 tools/pm_eeprom.py sticker in.BIN out.BIN 44730 984960 ... (21 values)
 python3 tools/pm_eeprom.py fix     in.BIN out.BIN

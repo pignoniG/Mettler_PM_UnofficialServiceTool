@@ -115,6 +115,20 @@ class App(ttk.Frame):
         ttk.Button(typ, text="DeltaRange: fine increment over whole range",
                    command=self.do_fine).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
+        disp = ttk.LabelFrame(right, text="Display", padding=6)
+        disp.pack(fill="x", pady=(0, 6))
+        ttk.Label(disp, text="Deadband [units]").grid(row=0, column=0, sticky="w")
+        self.deadband = ttk.Entry(disp, width=10)
+        self.deadband.grid(row=0, column=1)
+        ttk.Button(disp, text="Apply", command=self.do_deadband).grid(row=0, column=2, padx=4)
+        ttk.Label(disp, text="Stability [increments]").grid(row=1, column=0, sticky="w")
+        self.stability = ttk.Entry(disp, width=10)
+        self.stability.grid(row=1, column=1)
+        ttk.Button(disp, text="Apply", command=self.do_stability).grid(row=1, column=2, padx=4)
+        ttk.Label(disp, text="deadband 0 shows every change; a larger\nstability window "
+                             "helps taring/calibration",
+                  foreground="gray").grid(row=2, column=0, columnspan=3, sticky="w")
+
         raw = ttk.LabelFrame(right, text="Direct value edit", padding=6)
         raw.pack(fill="x")
         self.sel = ttk.Combobox(raw, width=8, state="readonly",
@@ -280,6 +294,26 @@ class App(ttk.Frame):
                  f"(accepted within about +/-{new * digit / 32:g} g)")
         self._refresh()
 
+    def whole(self, entry, what):
+        v = self.num(entry, what)
+        if v != int(v):
+            raise pm.PmError(f"{what}: enter a whole number.")
+        return int(v)
+
+    @guard
+    def do_deadband(self):
+        msg = pm.set_deadband(self.data, self.whole(self.deadband, "Deadband"), self.cap())
+        self.dirty = True
+        self.say(msg)
+        self._refresh()
+
+    @guard
+    def do_stability(self):
+        msg = pm.set_stability(self.data, self.whole(self.stability, "Stability window"))
+        self.dirty = True
+        self.say(msg)
+        self._refresh()
+
     @guard
     def do_fine(self):
         done = False
@@ -382,6 +416,7 @@ class App(ttk.Frame):
             if val:
                 out.append(f"  secondary range: above {val * digit:g} g the step is "
                            f"{step * digit:g} g")
+        out.extend(pm.display_filter_lines(x, cap_g))
         out.append("\nStored values")
         for name, (a, desc) in {**pm.OTHER, **pm.CELL}.items():
             out.append(f"  {name:5s} [{a:02X}] {pm.g24(x, a):9d}   {desc}")
