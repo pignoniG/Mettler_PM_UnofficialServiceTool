@@ -177,6 +177,8 @@ def cmd_info(x, swapped, args):
     print(f"type: capacity {cap * dg:g} g, cal weight {cal * dg:g} g, "
           f"display step {dg:g} g, service factor {sf}")
     digit = dg
+    for line in display_filter_lines(x, args.capacity):
+        print(line)
     print()
     for name, (a, d) in {**OTHER, **CELL}.items():
         print(f"  {name:5s} [{a:02X}] {g24(x, a):9d}   {d}")
@@ -295,6 +297,30 @@ def blocking_on(x):
     return bool(x[0x2B] & 0x04)
 
 
+def display_filter(x, capacity_g=None):
+    """bytes 0x28 (display deadband, in internal units) and 0x27 (stability window, in display
+    increments). Returns (deadband units, stability steps, internal unit in g, display step in g)."""
+    u, digit = units(x, capacity_g)
+    return x[0x28], x[0x27], (1 / u if u else None), digit
+
+
+def display_filter_lines(x, capacity_g=None):
+    dead, stab, unit_g, digit = display_filter(x, capacity_g)
+    out = []
+    if unit_g:
+        jump = (dead + 1) * unit_g
+        out.append(f"display deadband [28]: {dead} internal units = {dead * unit_g * 1000:g} mg "
+                   f"(the display follows changes of {jump * 1000:g} mg or more)")
+        if jump > digit * 1.0001:
+            out.append(f"  WARNING: that is more than one display step ({digit * 1000:g} mg) - "
+                       f"the last digit will move in jumps; lower it with 'deadband'")
+    else:
+        out.append(f"display deadband [28]: {dead} internal units")
+    out.append(f"stability window  [27]: {stab} x the display increment "
+               f"(steady while each change stays below that)")
+    return out
+
+
 def cmd_config(x, args):
     """copy the customer's settings over from another dump (the service manual's
     'record the customer's configuration' step, done by file)"""
@@ -312,6 +338,39 @@ def cmd_blocking(x, args):
     print(f"calibration/configuration blocking: {'on' if old else 'off'} -> {'on' if new else 'off'}")
     print("on  = the cassette jumper decides whether calibration and the menu are allowed\n"
           "off = always allowed, the jumper is ignored")
+
+
+def set_deadband(x, n, capacity_g=None):
+    """byte 0x28: the shown weight only follows changes larger than n internal units.
+    Inside the deadband the stability detector also sees 'no change', so 0 makes it stricter."""
+    if not 0 <= n <= 255:
+        raise PmError("the deadband is one byte: 0..255 internal units")
+    old = x[0x28]
+    x[0x28] = n
+    _, _, unit_g, _ = display_filter(x, capacity_g)
+    mg = (lambda v: f" ({v * unit_g * 1000:g} mg)") if unit_g else (lambda v: "")
+    return f"display deadband: {old}{mg(old)} -> {n}{mg(n)} internal units"
+
+
+def set_stability(x, n):
+    """byte 0x27: steady while each change stays below n display increments"""
+    if not 1 <= n <= 255:
+        raise PmError("the stability window must be 1..255 display increments "
+                      "(0 would never count as steady, and calibration would always fail)")
+    old = x[0x27]
+    x[0x27] = n
+    return f"stability window: {old} -> {n} x the display increment"
+
+
+def cmd_deadband(x, args):
+    print(set_deadband(x, args.units, args.capacity))
+    print("0 shows every change; inside the deadband the stability detector also sees 'no change',\n"
+          "so with 0 at a fine readability, raise the stability window if taring or calibration\n"
+          "times out (Err 1).")
+
+
+def cmd_stability(x, args):
+    print(set_stability(x, args.steps))
 
 
 def cmd_mode(x, args):
@@ -399,6 +458,10 @@ def main():
                                 help="let the cassette jumper block calibration and configuration")
     mk("config").add_argument("--source", required=True,
                               help="dump to copy the user settings from")
+    mk("deadband").add_argument("--units", type=int, required=True,
+                                help="display deadband, byte 0x28, in internal units (0 = none)")
+    mk("stability").add_argument("--steps", type=int, required=True,
+                                 help="stability window, byte 0x27, in display increments (stock 2)")
     mk("fix")
     args = p.parse_args()
     try:
@@ -410,6 +473,7 @@ def main():
     try:
         {"set": cmd_set, "lin": cmd_lin, "tcspan": cmd_tcspan, "tczero": cmd_tczero,
          "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode, "blocking": cmd_blocking, "config": cmd_config,
+         "deadband": cmd_deadband, "stability": cmd_stability,
          "fix": lambda x, a: None}[args.cmd](x, args)
     except PmError as e:
         sys.exit(str(e))
