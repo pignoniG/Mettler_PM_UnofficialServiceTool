@@ -309,15 +309,14 @@ def display_filter_lines(x, capacity_g=None):
     out = []
     if unit_g:
         jump = (dead + 1) * unit_g
-        out.append(f"display deadband [28]: {dead} internal units = {dead * unit_g * 1000:g} mg "
-                   f"(the display follows changes of {jump * 1000:g} mg or more)")
+        out.append(f"display deadband [28]: {dead} units = {dead * unit_g * 1000:g} mg "
+                   f"(display follows changes >= {jump * 1000:g} mg)")
         if jump > digit * 1.0001:
-            out.append(f"  WARNING: that is more than one display step ({digit * 1000:g} mg) - "
-                       f"the last digit will move in jumps; lower it with 'deadband'")
+            out.append(f"  WARNING: more than one display step ({digit * 1000:g} mg), "
+                       f"the last digit jumps - lower it")
     else:
         out.append(f"display deadband [28]: {dead} internal units")
-    out.append(f"stability window  [27]: {stab} x the display increment "
-               f"(steady while each change stays below that)")
+    out.append(f"stability window [27]: {stab} x the display increment")
     return out
 
 
