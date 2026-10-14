@@ -29,6 +29,8 @@ document are V10.45 unless stated.
 | 2B | certified-behaviour flags. **Bit 2 = calibration/configuration blocking**: when it is set the cassette jumper (bit 7 of the scanned switch byte at XRAM 70D1) decides whether calibration and the menu are allowed; when it is clear both are always allowed and *the jumper does nothing*. Routine 0x9996 returns that decision, and it is called from the calibration path (0x95AD) and the configuration entry (0x8E9F). Certified PM3000 has 0x85 here, the normal units 0x00 |
 | 2E–31 | **SPAN** – factory span factor K (24 bit) + checksum 31 |
 | 32–35 | **UCAL** – user calibration trim (24 bit) + checksum 35; written by the normal CAL key |
+| 27 | **stability window**, in display increments: the reading counts as stable while it moves less than this × the current increment (RAM 75h) - firmware 0x85EB-0x861E. 2 on every reference unit |
+| 28 | **display deadband**, in internal units (display step ÷ multiplier, see §4): the shown value only follows when the filtered weight has moved by *more* than this (0x855B-0x85A0, read nowhere else). 2 on most units, about a quarter of a digit - e.g. 2.5 mg on a PM4600 with its 10 mg digit. It is not scaled with the display step, so a finer digit needs it lowered: with a 1 mg digit and 1 mg internal units a value of 2 makes the display jump in 3 mg steps. 0 = no deadband |
 | 2A | **decimals shown in grams** - this is what fixes the display step (3 = 1 mg, 2 = 10 mg, 1 = 0.1 g) |
 | 36–3D | configuration (menu settings) |
 | 3A–3D | optional **user-defined calibration weight** + checksum 3D; all zeros when unused, and the firmware only validates it when that menu option is on - so leave it alone |

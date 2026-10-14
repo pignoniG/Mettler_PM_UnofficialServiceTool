@@ -106,6 +106,10 @@ Python 3.8 or newer. No third-party packages - the GUI uses tkinter from the sta
 The EEPROM is a 93C46 in 16-bit mode (64 words, 128 bytes), on the balance/scale board. Any programmer
 that handles the 93C46 family will do; read it twice and compare before you change anything.
 
+**Set the programmer to x16 (16-bit organisation)** for reading and writing alike. In x8 mode the two
+bytes of every word end up swapped in the chip, and the balance stops at power-on with **error 8** (the
+type-check byte 0x68 no longer has its 0x60 form). Nothing is damaged - reprogram in x16.
+
 **Byte order**: the balance's processor shifts each 16-bit word out MSB first, but many programmers save
 the file with the two bytes of each word swapped. The tool detects which order your file uses - by
 checking the four checksums and the type byte - and always writes back in the same order it read, so the

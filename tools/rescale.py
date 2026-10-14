@@ -8,8 +8,9 @@ keep the original dump, and expect to need the bench to confirm the result.
 
 The display step is 10^-(byte 0x2A) grams, and every type value is expressed in those steps,
 so making the digit ten times finer means: decimals + 1, every weight-valued type pair x 10,
-the internal multiplier (byte 0x14) reduced to keep the 24-bit values in range, and SPAN/UCAL
-scaled by the change in internal counts per gram.
+the internal multiplier (byte 0x14) reduced to keep the 24-bit values in range, SPAN/UCAL
+scaled by the change in internal counts per gram, and the display deadband (byte 0x28, counted in
+internal units) adjusted so it stays the same fraction of a digit.
 
 Pair 0x17 is deliberately NOT scaled: it reads 900 steps on all five reference balances
 (PM200, PM3000, PM4600, PM6000, PJ6000), i.e. it is specified in display steps, not in grams.
@@ -68,6 +69,7 @@ def main():
     print(f"  SPAN {span_old} -> {round(span_new)}, UCAL {ucal_old} -> {round(ucal_old*scale)}")
 
     # 1. decimals and multiplier
+    old_mult_byte = x[0x14]
     x[0x2A] = (x[0x2A] & ~0x07) | (decimals & 7)
     x[0x14] = (x[0x14] & ~0x70) | (mult_idx << 4)
     # 2. type values
@@ -84,6 +86,15 @@ def main():
             val, _ = pm.type_value(x, x[pair], x[pair + 1])
             print(f"  pair {pair:02X}: {val} steps kept -> now {val*digit_new:g} g "
                   f"(was {val*digit_old:g} g)  <- watch this one")
+    # 2b. display deadband (byte 0x28): held changes up to this many internal units. It is a fixed
+    #     number of units, so keep it the same fraction of a digit: units/multiplier stays constant.
+    #     The PM4600 (2 units, multiplier 8 = a quarter digit) went to 3 mg jumps when this was left alone.
+    mult_old = pm.MULT76[(old_mult_byte >> 4) & 7]
+    dead_old = x[0x28]
+    dead_new = round(dead_old * mult / mult_old)
+    x[0x28] = dead_new
+    print(f"  display deadband (0x28): {dead_old} -> {dead_new} internal units "
+          f"({dead_old*digit_old/mult_old*1000:g} mg -> {dead_new*digit_new/mult*1000:g} mg)")
     # 3. span and user trim
     pm.s24(x, 0x2E, round(span_new))
     pm.s24(x, 0x32, round(ucal_old * scale))
