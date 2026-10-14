@@ -87,6 +87,10 @@ been tried. Specifically:
   that is the first suspect - `--scale-17` flips the choice.
 - **Two pairs remain unidentified** in general (0x17 and 0x1D); the scaling rule came from comparing how
   each value behaves across the five reference dumps, not from tracing every use in the firmware.
+- **Fixed bug: auto-zero.** Versions of the script before October 2026 cleared bit 7 of the type
+  bytes when re-encoding them. On byte 0x1E that bit enables auto-zero, so a rescaled balance stopped
+  tracking its zero (the reading drifts with nothing on the pan); on 0x22/0x24 it marks the secondary
+  ranges. `info` now flags a missing auto-zero bit and `autozero --state on` restores it.
 - **The display deadband (byte 0x28) is rescaled too**, so it stays the same fraction of a digit; on the
   PM4600 that takes it from 2 to 0. With no deadband at a 1 mg readability every flicker counts as
   movement, so taring or calibrating can time out with Err 1; `stability --steps 4` (byte 0x27) or
@@ -158,6 +162,7 @@ python3 tools/pm_eeprom.py mode    in.BIN out.BIN --code 00
 python3 tools/pm_eeprom.py blocking in.BIN out.BIN --state on
 python3 tools/pm_eeprom.py config  in.BIN out.BIN --source old.BIN
 python3 tools/pm_eeprom.py deadband in.BIN out.BIN --units 0
+python3 tools/pm_eeprom.py autozero in.BIN out.BIN --state on
 python3 tools/pm_eeprom.py stability in.BIN out.BIN --steps 4
 python3 tools/pm_eeprom.py set     in.BIN out.BIN L0=2253 S1=-182000
 python3 tools/pm_eeprom.py sticker in.BIN out.BIN 44730 984960 ... (21 values)

@@ -78,7 +78,8 @@ def main():
         val, step = pm.type_value(x, x[pair], x[pair + 1])
         if not val:
             continue
-        r7, r6 = pm.encode_pair(val * factor, (x[pair + 1] >> 4) & 7, x[pair] & 0x80)
+        r7, r6 = pm.encode_pair(val * factor, (x[pair + 1] >> 4) & 7, x[pair] & 0x80,
+                                x[pair + 1] & 0x80)
         x[pair], x[pair + 1] = r7, r6
         print(f"  pair {pair:02X}: {val} -> {val*factor} steps ({val*digit_old:g} g, unchanged)")
     for pair in STEP_PAIRS:

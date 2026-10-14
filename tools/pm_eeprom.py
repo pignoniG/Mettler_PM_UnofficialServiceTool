@@ -246,13 +246,17 @@ def cmd_tczero(x, args):
     apply(x, "Z1", d)
 
 
-def encode_pair(value, step_idx, flag):
-    """pack a value back into the 2-byte type code used by firmware B845"""
+def encode_pair(value, step_idx, flag, flag2=0):
+    """pack a value back into the 2-byte type code used by firmware B845.
+    flag = bit 7 of the first byte, flag2 = bit 7 of the second byte. Neither is part of the value,
+    but the firmware uses both (e.g. 0x1E bit 7 enables auto-zero, 0x22/0x24 bit 7 mark the
+    secondary ranges), so callers must pass the existing bits through."""
     for d in range(4):
         for o in range(4):
             rest = value - T2[o]
             if rest > 0 and rest % T1[d] == 0 and 1 <= rest // T1[d] <= 127:
-                return (rest // T1[d]) | (0x80 if flag else 0), (step_idx << 4) | (o << 2) | d
+                return ((rest // T1[d]) | (0x80 if flag else 0),
+                        (0x80 if flag2 else 0) | (step_idx << 4) | (o << 2) | d)
     raise PmError(f"value {value} cannot be encoded as a type value")
 
 
@@ -297,6 +301,12 @@ def blocking_on(x):
     return bool(x[0x2B] & 0x04)
 
 
+def autozero_allowed(x):
+    """type byte 0x1E bit 7: the firmware only runs auto-zero tracking when it is set (0x85AC);
+    the menu's AZ on/off (byte 00 bit 6) works only on top of it. Set on every factory dump."""
+    return bool(x[0x1E] & 0x80)
+
+
 def display_filter(x, capacity_g=None):
     """bytes 0x28 (display deadband, in internal units) and 0x27 (stability window, in display
     increments). Returns (deadband units, stability steps, internal unit in g, display step in g)."""
@@ -317,6 +327,9 @@ def display_filter_lines(x, capacity_g=None):
     else:
         out.append(f"display deadband [28]: {dead} internal units")
     out.append(f"stability window [27]: {stab} x the display increment")
+    if not autozero_allowed(x):
+        out.append("auto-zero [1E bit 7]: OFF - the zero will not be tracked even with AZ on in the\n"
+                   "  menu; 'autozero --state on' restores it (rescale.py before Oct 2026 cleared it)")
     return out
 
 
@@ -361,6 +374,13 @@ def set_stability(x, n):
     return f"stability window: {old} -> {n} x the display increment"
 
 
+def cmd_autozero(x, args):
+    old = autozero_allowed(x)
+    x[0x1E] = (x[0x1E] | 0x80) if args.state == "on" else (x[0x1E] & 0x7F)
+    print(f"auto-zero allowed by the type data (0x1E bit 7): {'on' if old else 'off'} -> {args.state}")
+    print("the menu's AZ setting still switches it on and off on top of this")
+
+
 def cmd_deadband(x, args):
     print(set_deadband(x, args.units, args.capacity))
     print("0 shows every change; inside the deadband the stability detector also sees 'no change',\n"
@@ -395,7 +415,7 @@ def cmd_calweight(x, args):
     new = round(args.grams / digit)
     if abs(new * digit - args.grams) > digit / 2:
         sys.exit(f"{args.grams} g is not a whole number of {digit} g digits")
-    r7, r6 = encode_pair(new, (x[0x26] >> 4) & 7, x[0x25] & 0x80)
+    r7, r6 = encode_pair(new, (x[0x26] >> 4) & 7, x[0x25] & 0x80, x[0x26] & 0x80)
     x[0x25], x[0x26] = r7, r6
     print(f"calibration weight: {old * digit:g} g -> {new * digit:g} g "
           f"({old} -> {new} digits, bytes 25/26 = {r7:02X} {r6:02X})")
@@ -457,6 +477,8 @@ def main():
                                 help="let the cassette jumper block calibration and configuration")
     mk("config").add_argument("--source", required=True,
                               help="dump to copy the user settings from")
+    mk("autozero").add_argument("--state", choices=("on", "off"), required=True,
+                                help="auto-zero tracking allowed by the type data (byte 0x1E bit 7)")
     mk("deadband").add_argument("--units", type=int, required=True,
                                 help="display deadband, byte 0x28, in internal units (0 = none)")
     mk("stability").add_argument("--steps", type=int, required=True,
@@ -472,7 +494,7 @@ def main():
     try:
         {"set": cmd_set, "lin": cmd_lin, "tcspan": cmd_tcspan, "tczero": cmd_tczero,
          "sticker": cmd_sticker, "fine": cmd_fine, "calweight": cmd_calweight, "mode": cmd_mode, "blocking": cmd_blocking, "config": cmd_config,
-         "deadband": cmd_deadband, "stability": cmd_stability,
+         "deadband": cmd_deadband, "stability": cmd_stability, "autozero": cmd_autozero,
          "fix": lambda x, a: None}[args.cmd](x, args)
     except PmError as e:
         sys.exit(str(e))
