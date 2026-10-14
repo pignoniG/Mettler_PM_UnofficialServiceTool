@@ -287,7 +287,8 @@ class App(ttk.Frame):
         new = round(grams / digit)
         if abs(new * digit - grams) > digit / 2:
             raise pm.PmError(f"{grams} g is not a whole number of {digit} g display steps.")
-        r7, r6 = pm.encode_pair(new, (self.data[0x26] >> 4) & 7, self.data[0x25] & 0x80)
+        r7, r6 = pm.encode_pair(new, (self.data[0x26] >> 4) & 7, self.data[0x25] & 0x80,
+                                    self.data[0x26] & 0x80)
         self.data[0x25], self.data[0x26] = r7, r6
         self.dirty = True
         self.say(f"calibration weight: {old * digit:g} g -> {new * digit:g} g "
