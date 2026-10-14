@@ -170,9 +170,11 @@ since the decimal point does not follow by itself.
 **How far it can go.** The display is rarely the limit - seven digits cover any of these types at ten times
 their normal resolution. The real bounds are, in order:
 
-1. **The A/D.** It accumulates over the cycle count in RAM 32h and is normalised by 240/32h, so raw values
-   arrive in steps of about 6.5 mg on a PM4600 but only 33 ug on a PM200. Divide the wanted display step by
-   that figure: fewer than a handful of counts per step and the last digit is quantisation noise.
+1. **The A/D.** It accumulates over the cycle count in RAM 32h (24 in stock firmware) and is normalised by
+   240/32h, so raw values only land on multiples of 10 - one A/D count is 10 raw units, which is **6.5 mg
+   on a PM4600** and **0.33 mg on a PM200**. Mettler's own types sit at 1.5 to 3 A/D counts per display
+   step, so that is the yardstick for how fine a step is honest. Raising the integration count (a firmware
+   change) buys resolution in proportion, at the same cost in update rate.
 2. **The 24-bit internal value**, capacity in steps x the multiplier from byte 0x14, and the span factor
    SPAN, which must both stay under 8388607.
 3. **The cell itself** - repeatability, cornerload and temperature behaviour are all far coarser than one

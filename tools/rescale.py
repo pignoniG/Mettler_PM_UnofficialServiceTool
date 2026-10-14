@@ -88,16 +88,24 @@ def main():
     pm.s24(x, 0x2E, round(span_new))
     pm.s24(x, 0x32, round(ucal_old * scale))
     # 4. readability, so the balance comes up at a step the A/D can actually resolve
-    want = a.readability or next(s for s in pm.STEP if R * digit_new * s >= 5)
+    # default to the finest step still worth displaying: Mettler runs 1.5-3 A/D counts per step,
+    # and about 0.75 is the point below which the digit is carried by dither alone
+    want = a.readability or next(s for s in pm.STEP if R * digit_new * s / 10 >= 0.75)
     x[0x02] = (x[0x02] & ~0xE0) | (pm.STEP.index(want) << 5)
-    print(f"  readability set to {want} -> display step {want*digit_new*1000:g} mg "
-          f"({R*digit_new*want:.1f} A/D counts per step); the menu can change this")
+    print(f"  readability set to {want} -> display step {want*digit_new*1000:g} mg; "
+          f"the menu can change this")
 
-    counts = R * digit_new * want
-    if counts < 5:
-        print(f"\nWARNING: {counts:.1f} A/D counts per display step. Below about 5 the last digit is\n"
-              f"         quantisation noise rather than resolution. A coarser --readability, or a\n"
-              f"         larger --digit-mg, would give an honest display.")
+    # raw values only land on multiples of the normaliser (240 / the integration count in RAM 32h,
+    # = 10 with stock firmware), so one real A/D count is that many raw units
+    NORMALISER = 10
+    counts = R * digit_new * want / NORMALISER
+    print(f"  one A/D count = {NORMALISER/R*1000:.2f} mg, so that step is {counts:.2f} A/D counts"
+          f"  (Mettler's own types run 1.5 to 3)")
+    if counts < 1.0:
+        print(f"\nWARNING: {counts:.2f} A/D counts per display step - finer than the converter resolves.\n"
+              f"         It will still show a moving last digit, because the balance's own noise\n"
+              f"         dithers it and the firmware averages, but there is no new information in it.\n"
+              f"         A coarser --readability or a larger --digit-mg would give an honest display.")
     print("\nOn the bench: program this, set readability to the value that reproduces the balance's\n"
           "original step, and check a known weight reads as it did before. That tests the rescale\n"
           "on its own. Only then select the finer step.")
