@@ -45,8 +45,12 @@ understand your dump rather than just edit it.
   fine range - on a PM4600 that means 10 mg up to 4100 g, which is the PM4000 specification.
 - **Switch between the normal and certified operating modes** (the code the balance shows as the last
   pair of its software number at power-up).
-- **Enable or disable the calibration/configuration lock** - the cassette jumper only has any effect
-  when the EEPROM says so, which is why it appears dead on a normal balance.
+- **Enable or disable the calibration lock.** The jumper in the program cassette does two separate
+  things. It always locks the configuration file (from standby, holding the bar no longer reaches
+  -Conf-) - that is the "secured" position in the user manual, and no EEPROM setting changes it. It
+  locks calibration only when the EEPROM says so (byte 0x2B bit 2, off on normal balances), which is what
+  this command switches. So on a normal balance with the jumper fitted you can calibrate but not
+  configure.
 - **Set the display deadband and the stability window** (bytes 0x28 and 0x27). The deadband holds the
   shown weight until it has moved by more than a set amount; it is about a quarter of a digit from the
   factory, but it is counted in internal units, so after a finer display step it can make the last digit

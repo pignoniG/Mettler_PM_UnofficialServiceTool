@@ -19,7 +19,7 @@ Usage:
   pm_eeprom.py sticker IN.BIN OUT.BIN V00 V01 ... V20     (write cell block from sticker)
   pm_eeprom.py calweight IN.BIN OUT.BIN --grams 2000
   pm_eeprom.py mode   IN.BIN OUT.BIN --code 00     (operating mode / certification)
-  pm_eeprom.py blocking IN.BIN OUT.BIN --state on (let the cassette jumper lock calibration)
+  pm_eeprom.py blocking IN.BIN OUT.BIN --state on (let the cassette jumper lock calibration too)
   pm_eeprom.py config IN.BIN OUT.BIN --source OLD.BIN  (carry the customer's menu settings over)
   pm_eeprom.py fine   IN.BIN OUT.BIN     (DeltaRange: fine display increment over the whole range)
   pm_eeprom.py fix    IN.BIN OUT.BIN                        (only recompute checksums)
@@ -167,7 +167,8 @@ def cmd_info(x, swapped, args):
           f"{'OK' if x[0x68] == want else f'MISMATCH - should be {want:02X}, the balance stops with error 9'}")
     print(f"ID          [0E-10]: {x[0x0E]:02X}{x[0x0F]:02X}{x[0x10]:02X}")
     print(f"mode        [08]   : {x[0x08]:02X}  {mode_name(x[0x08])}")
-    print(f"cal/menu block [2B]: {'on - the cassette jumper decides' if blocking_on(x) else 'off - jumper ignored'}")
+    print(f"cal. lock   [2B]   : {'on - the cassette jumper also locks calibration' if blocking_on(x) else 'off - calibration always allowed'}")
+    print("                     (a fitted jumper always locks the configuration file)")
     for name, (a, n) in BLOCKS.items():
         print(f"checksum {name:8s}: {'OK' if ck(x, a, n) == 0 else 'BAD'}  ({a:02X}..{a + n - 1:02X})")
     cap, _ = type_value(x, x[0x15], x[0x16])
@@ -343,13 +344,15 @@ def cmd_config(x, args):
 
 
 def cmd_blocking(x, args):
-    """byte 0x2B bit 2: whether the cassette jumper can block calibration and configuration"""
+    """byte 0x2B bit 2: whether the cassette jumper also blocks calibration. The configuration file
+    is locked by the jumper regardless (firmware 0xE552)."""
     old = blocking_on(x)
     new = args.state == "on"
     x[0x2B] = (x[0x2B] | 0x04) if new else (x[0x2B] & ~0x04)
-    print(f"calibration/configuration blocking: {'on' if old else 'off'} -> {'on' if new else 'off'}")
-    print("on  = the cassette jumper decides whether calibration and the menu are allowed\n"
-          "off = always allowed, the jumper is ignored")
+    print(f"calibration blocking: {'on' if old else 'off'} -> {'on' if new else 'off'}")
+    print("on  = the cassette jumper also decides whether calibration is allowed\n"
+          "off = calibration always allowed\n"
+          "either way, a fitted jumper locks the configuration file")
 
 
 def set_deadband(x, n, capacity_g=None):
@@ -474,7 +477,7 @@ def main():
                             help="operating mode byte in hex: 00 normal, 10/20 certified, "
                                  "11-19/21-29 national, 50-FF special")
     mk("blocking").add_argument("--state", choices=("on", "off"), required=True,
-                                help="let the cassette jumper block calibration and configuration")
+                                help="let the cassette jumper block calibration too (it always locks the configuration file)")
     mk("config").add_argument("--source", required=True,
                               help="dump to copy the user settings from")
     mk("autozero").add_argument("--state", choices=("on", "off"), required=True,
