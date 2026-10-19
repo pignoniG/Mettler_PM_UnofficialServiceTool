@@ -22,6 +22,8 @@ except ImportError:
     sys.exit("needs pyserial:  python3 -m pip install pyserial")
 
 LINE = re.compile(r'^\s*(S|SD|SI|SIR|T)?\s*([-+]?\d+(?:\.\d+)?)\s*(\S+)?\s*$')
+# R line of the service-cassette patch (--raw): window sum, raw value, unfiltered / filtered temperature, window length, all hex
+RLINE = re.compile(r'^R ([0-9A-F]{8}) ([0-9A-F]{6}) ([0-9A-F]{6}) ([0-9A-F]{6}) ([0-9A-F]{2})$')
 
 
 def find_port():
@@ -65,12 +67,15 @@ def main():
                 txt = raw.decode('ascii', 'replace').strip()
                 m = LINE.match(txt)
                 now = time.time()
-                if m:
+                rm = RLINE.match(txt)
+                if rm:                                   # value = the raw value that feeds the correction (decimal)
+                    status, value, unit = 'R', int(rm.group(2), 16), 'cnt'
+                elif m:
                     status, value, unit = m.group(1) or '', float(m.group(2)), m.group(3) or ''
                 else:
                     status, value, unit = 'other', '', ''
                     bad += 1
-                if a.stable_only and status not in ('S', 'T'):
+                if a.stable_only and status not in ('S', 'T', 'R'):
                     continue
                 w.writerow([datetime.datetime.now().isoformat(timespec='milliseconds'),
                             f'{now - t0:.3f}', status, value, unit, txt])
