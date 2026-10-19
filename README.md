@@ -13,7 +13,9 @@ nothing more than an EEPROM programmer.
 
 Everything here was reverse-engineered from the V10.45 cassette firmware and verified against five
 balances (PM200, PM3000, PM4600, PM6000, PJ6000) and their stickers. **The tool only ever touches the
-EEPROM; it does not modify balance firmware.**
+EEPROM; it does not modify balance firmware.** Firmware-side work (patches for the cassette
+image, a firmware simulator and the draft of a PC-assisted service cassette) lives in a separate repository:
+[Mettler_PM_UnofficialServiceCassette](https://github.com/pignoniG/Mettler_PM_UnofficialServiceCassette).
 
 **The J series works too.** PJ/AJ/CJ balances run their own firmware - V20.xx rather than V10.xx, for a
 different display - but they store their parameters the same way, so the tool applies unchanged. That is

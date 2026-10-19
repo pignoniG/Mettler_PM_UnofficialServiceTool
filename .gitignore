@@ -23,5 +23,11 @@ __pycache__/
 FIRMWARE_NOTES.md
 tools/usermanual.txt
 tools/rom_boxcar.py
+tools/rom_temperature.py
+tools/rom_standby_weigh.py
+tools/rom_standby_serial.py
+tools/asm51.py
+tools/cpu51.py
+tools/fwsim.py
 tools/emu51.py
 tools/rom_comparator.py
