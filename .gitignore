@@ -34,3 +34,6 @@ tools/rom_comparator.py
 
 # timestamped chip backups of the live tabs
 tools/live_backups/
+
+# characterisation-tool sessions (raw logs of real runs), kept local
+sessions/
