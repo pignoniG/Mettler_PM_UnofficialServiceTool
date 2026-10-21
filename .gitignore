@@ -31,3 +31,6 @@ tools/cpu51.py
 tools/fwsim.py
 tools/emu51.py
 tools/rom_comparator.py
+
+# timestamped chip backups of the live tabs
+tools/live_backups/

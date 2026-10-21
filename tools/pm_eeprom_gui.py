@@ -2,15 +2,30 @@
 """
 Graphical front end for pm_eeprom.py - Mettler AM/PM series parameter EEPROM editor.
 
-Standard library only (tkinter). Run with:   python3 pm_eeprom_gui.py [dump.BIN]
+Run with:   python3 pm_eeprom_gui.py [dump.BIN]
+
+Three tabs: "Dump file" edits a dump file offline (standard library only, tkinter); "Live balance" reads the EEPROM
+of a connected balance, saves it to a file, applies the same edits as the file tab and writes the result (or any
+opened file) back; "Procedures" runs the service manual's adjustments (calibration resistor check, linearity,
+calibration, temperature check and compensation) from live readings and applies the result to the image of the
+Live balance tab. The live tabs need pyserial and a balance with a cassette
+that answers the service commands (see pm_serial.py); every write first saves a timestamped backup of the chip
+into live_backups/ next to this file.
 """
 import os
+import queue
 import sys
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pm_eeprom as pm
+import pm_serial
+from pm_procedures_gui import Procedures
+
+BACKUPS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_backups")
 
 
 class App(ttk.Frame):
@@ -215,7 +230,7 @@ class App(ttk.Frame):
             return
         out = filedialog.asksaveasfilename(
             title="Save modified dump", defaultextension=".BIN",
-            initialfile=os.path.basename(self.path or "eeprom.BIN"),
+            initialfile=self.default_name(),
             filetypes=[("EEPROM dump", "*.BIN *.bin")])
         if not out:
             return
@@ -235,6 +250,9 @@ class App(ttk.Frame):
         self.dirty = False
         self.say(f"saved {os.path.basename(out)} (checksums recomputed)")
         self._refresh()
+
+    def default_name(self):
+        return os.path.basename(self.path or "eeprom.BIN")
 
     def do_revert(self):
         if not self.need_file():
@@ -442,6 +460,153 @@ class App(ttk.Frame):
         return "\n".join(out) + "\n"
 
 
+class Session:
+    """the serial connection shared by the two live tabs; all balance traffic runs in a worker thread"""
+
+    def __init__(self, root):
+        self.root = root
+        self.link = None
+        self.version = None
+        self.busy = False
+        self.pending = None            # image of the last accepted write, for Verify
+        self.cancel = False            # set by the Procedures tab to stop a running capture
+        self.status = tk.StringVar(value="not connected")
+
+    def connected(self):
+        if self.link is None:
+            messagebox.showwarning("Not connected", "Connect to the balance first (top bar).")
+            return False
+        return True
+
+    def run(self, work, done, what):
+        if self.busy:
+            return
+        self.busy = True
+        self.status.set(what + "...")
+        q = queue.Queue()
+
+        def job():
+            try:
+                q.put(("ok", work()))
+            except Exception as e:                      # shown to the user, never silently lost
+                q.put(("err", e))
+        threading.Thread(target=job, daemon=True).start()
+
+        def poll():
+            try:
+                kind, val = q.get_nowait()
+            except queue.Empty:
+                self.root.after(100, poll)
+                return
+            self.busy = False
+            self.status.set(self.version or "not connected")
+            if kind == "ok":
+                done(val)
+            else:
+                messagebox.showerror("Balance", str(val))
+        poll()
+
+    def connect(self, port, done=None):
+        def work():
+            link = pm_serial.Link(port)
+            try:
+                return link, link.connect()
+            except Exception:
+                link.close()
+                raise
+
+        def ok(res):
+            self.link, self.version = res
+            self.status.set(self.version)
+            if done:
+                done()
+        self.disconnect()
+        self.run(work, ok, "connecting")
+
+    def disconnect(self):
+        if self.link is not None:
+            self.link.close()
+        self.link = self.version = None
+        self.status.set("not connected")
+
+    def read(self, done):
+        if self.connected():
+            self.run(self.link.dump, done, "reading the EEPROM")
+
+    def restart(self, say):
+        if not self.connected():
+            return
+        if not messagebox.askyesno("Restart", "Restart the balance now?\nIt comes back in the -OFF- standby display: "
+                                              "press the control bar to wake it."):
+            return
+        self.run(self.link.restart, lambda _r: say("restart sent; wake the balance with the control bar"), "restarting")
+
+    def write(self, image, say, finished=None):
+        """back up the chip, ask, write, then tell the user to wake the balance and verify"""
+        if not self.connected():
+            return
+        img = bytearray(image)
+        pm.fix_checksums(img)
+        try:
+            pm_serial.check_image(img)
+        except pm_serial.LinkError as e:
+            messagebox.showerror("Image refused", str(e))
+            return
+
+        def backup():
+            chip = self.link.dump()
+            os.makedirs(BACKUPS, exist_ok=True)
+            path = os.path.join(BACKUPS, "eeprom_%s_%s.BIN" % (chip[0x0E:0x11].hex(), time.strftime("%Y%m%d_%H%M%S")))
+            pm.save(path, chip, True)
+            return chip, path
+
+        def after_backup(res):
+            chip, path = res
+            say("backup of the chip saved: " + path)
+            same = chip[0x0E:0x11] == img[0x0E:0x11]
+            if same:
+                ok = messagebox.askyesno("Write to the balance",
+                                         "Replace the whole EEPROM of the balance (ID %s) with this image?\n\n"
+                                         "This includes the user calibration.\nA backup was saved first." % chip[0x0E:0x11].hex())
+            else:
+                ok = messagebox.askyesno("Different ID",
+                                         "The image has ID %s, the chip in the balance has ID %s.\n\n"
+                                         "That is right for a board swap or a replaced EEPROM, wrong if you picked the "
+                                         "wrong file: the balance would run with another scale's parameters.\n\n"
+                                         "Write it anyway?" % (img[0x0E:0x11].hex(), chip[0x0E:0x11].hex()))
+            if not ok:
+                say("write cancelled")
+                return
+            self.run(lambda: self.link.load(img, override_id=not same), lambda _r: accepted(),
+                     "writing the EEPROM (about 10 s)")
+
+        def accepted():
+            self.pending = img
+            say("image accepted by the balance (ID %s); it restarts into -OFF-" % img[0x0E:0x11].hex())
+            messagebox.showinfo("Written", "The balance accepted the image and restarts into the -OFF- standby display.\n\n"
+                                           "Press the control bar to wake it, then use Verify.")
+            if finished:
+                finished(img)
+        self.run(backup, after_backup, "backing up the chip")
+
+    def verify(self, say):
+        if not self.connected():
+            return
+        if self.pending is None:
+            messagebox.showinfo("Verify", "No write to verify in this session.")
+            return
+
+        def done(chip):
+            diff = [i for i in range(128) if chip[i] != self.pending[i]]
+            if not diff:
+                say("verified: the chip equals the image written")
+            else:
+                say("chip read back; bytes that differ from the image: " + ", ".join("%02X" % i for i in diff) +
+                    ("   (0x36 and 0x39 are rewritten by the firmware at every restart)" if set(diff) <= {0x36, 0x39} else
+                     "   CHECK THIS"))
+        self.run(self.link.dump, done, "reading back")
+
+
 class StickerDialog(tk.Toplevel):
     """type in the 21 numbers printed on the parameter sticker"""
 
@@ -496,12 +661,243 @@ class StickerDialog(tk.Toplevel):
             self.destroy()
 
 
+def changed_parameters(a, b):
+    """names of the 24-bit parameters (and the other single bytes) that differ between two images"""
+    names = [n for n, (addr, _d) in {**pm.OTHER, **pm.CELL}.items() if pm.g24(a, addr) != pm.g24(b, addr)]
+    covered = set()
+    for n, (addr, _d) in {**pm.OTHER, **pm.CELL}.items():
+        covered.update(range(addr, addr + 3))
+    if any(a[i] != b[i] for i in range(128) if i not in covered and not 0x36 <= i <= 0x39):
+        names.append("other bytes")
+    return names
+
+
+class LiveEditor(App):
+    """the file editor working on the chip of the balance: read, edit with the same panels, write back"""
+
+    def __init__(self, master, session, shared_log=None):
+        self.s = session
+        self.shared = shared_log
+        self.chip = None                    # what the chip held when last read or written
+        self.read_at = None
+        self.undo_stack, self._last, self._undoing = [], None, False
+        super().__init__(master)
+        self.path = None
+        self.file_lbl.configure(text="not read yet")
+        self.after(300, self._tick_buttons)
+
+    def _build_toolbar(self):
+        bar = ttk.Frame(self)
+        bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.btn = {}
+        for key, text, cmd, pad in (("read", "Read from balance", self.do_read, 0), ("save", "Save to file...", self.do_save, 4),
+                                    ("open", "Open file...", self.do_open, 0), ("write", "Write to balance", self.do_write, 4),
+                                    ("undo", "Undo", self.undo, 0), ("revert", "Revert", self.do_revert, 4),
+                                    ("verify", "Verify last write", lambda: self.s.verify(self.say), 0),
+                                    ("restart", "Restart balance", lambda: self.s.restart(self.say), 4)):
+            self.btn[key] = ttk.Button(bar, text=text, command=cmd)
+            self.btn[key].pack(side="left", padx=(pad, 0))
+        self.file_lbl = ttk.Label(bar, text="")
+        self.file_lbl.pack(side="left", padx=12)
+
+    def _build_log(self):
+        pass                                    # messages go to the shared Changes strip at the bottom of the window
+
+    def say(self, text):
+        if self.shared is not None:
+            self.shared.add(text)
+
+    def _tick_buttons(self):
+        link, have = self.s.link is not None, self.data is not None
+        mod = have and self.modified()
+        want = {"read": link, "write": link and have and mod, "verify": link and self.s.pending is not None,
+                "restart": link, "save": have, "undo": bool(self.undo_stack), "revert": have and self.dirty}
+        for k, on in want.items():
+            self.btn[k].state(["!disabled" if on and not self.s.busy else "disabled"])
+        self.after(300, self._tick_buttons)
+
+    def modified(self):
+        return self.dirty or (self.chip is not None and self.data is not None and bytes(self.data) != bytes(self.chip))
+
+    def need_file(self):
+        if self.data is None:
+            messagebox.showwarning("Nothing read", "Read the EEPROM from the balance first.")
+            return False
+        return True
+
+    def _refresh(self):
+        if self.data is not None:
+            cur = bytes(self.data)
+            if self._last is not None and cur != self._last and not self._undoing:
+                self.undo_stack.append(self._last)
+            self._last = cur
+        super()._refresh()
+
+    def undo(self):
+        if not self.undo_stack:
+            return
+        prev = self.undo_stack.pop()
+        self._undoing = True
+        self.data = bytearray(prev)
+        self._refresh()
+        self._undoing = False
+        self.dirty = self.chip is None or bytes(self.data) != bytes(self.chip)
+        self.say("undone: the image is back to the previous state")
+        super()._refresh()
+
+    def do_read(self):
+        if self.modified() and not messagebox.askyesno("Discard changes?", "Reading replaces the edits not yet written. Continue?"):
+            return
+
+        def done(chip):
+            self.data, self.original, self.swapped, self.dirty = chip, bytearray(chip), True, False
+            self.chip, self.read_at = bytes(chip), time.strftime("%H:%M")
+            self.undo_stack, self._last = [], None
+            self.path = "balance %s" % chip[0x0E:0x11].hex()
+            self.capacity.delete(0, "end")
+            self.say("read the EEPROM of the balance (ID %s)" % chip[0x0E:0x11].hex())
+            self._refresh()
+        self.s.read(done)
+
+    def default_name(self):
+        return "eeprom_%s_%s.BIN" % (self.data[0x0E:0x11].hex(), time.strftime("%Y%m%d_%H%M%S"))
+
+    def do_open(self, path=None):
+        """load a file into the editor to write it to the balance (it counts as modified: it is not what the chip holds)"""
+        before = self.path
+        super().do_open(path)
+        if self.path != before:
+            self.dirty = True
+            self.undo_stack, self._last = [], None
+            self._refresh()
+
+    def do_write(self):
+        if not self.need_file():
+            return
+
+        def finished(img):
+            self.data, self.original, self.dirty = bytearray(img), bytearray(img), False
+            self.chip, self.read_at = bytes(img), time.strftime("%H:%M")
+            self._refresh()
+        self.s.write(self.data, self.say, finished)
+
+
+class ChangeLog(ttk.LabelFrame):
+    """one message strip for the whole window, so the result of an action is visible on every tab"""
+
+    def __init__(self, master):
+        super().__init__(master, text="Changes", padding=4)
+        self.columnconfigure(0, weight=1)
+        self.text = tk.Text(self, height=3, wrap="word", font=("Menlo", 11))
+        self.text.grid(row=0, column=0, sticky="ew")
+        self.text.configure(state="disabled")
+
+    def add(self, text):
+        self.text.configure(state="normal")
+        self.text.insert("end", "%s  %s\n" % (time.strftime("%H:%M:%S"), text))
+        self.text.see("end")
+        self.text.configure(state="disabled")
+
+
+class StatusHeader(ttk.Frame):
+    """what the user needs to know before pressing anything: link, balance, image, and the one write button"""
+
+    def __init__(self, master, session, editor):
+        super().__init__(master, padding=(8, 4, 8, 0))
+        self.s, self.ed = session, editor
+        self.columnconfigure(0, weight=1); self.columnconfigure(1, weight=1)
+        left = ttk.LabelFrame(self, text="Balance", padding=6); left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        self.dot = ttk.Label(left, text="\u25CF", font=("Helvetica", 16), foreground="#888888"); self.dot.grid(row=0, column=0, rowspan=2)
+        self.conn = ttk.Label(left, text="not connected", font=("Helvetica", 12, "bold")); self.conn.grid(row=0, column=1, sticky="w")
+        self.state = ttk.Label(left, text="", foreground="gray"); self.state.grid(row=1, column=1, sticky="w")
+        self.activity = ttk.Label(left, text="", foreground="#185FA5"); self.activity.grid(row=0, column=2, padx=12)
+        mid = ttk.LabelFrame(self, text="Working image", padding=6); mid.grid(row=0, column=1, sticky="nsew")
+        mid.columnconfigure(0, weight=1)
+        self.img_src = ttk.Label(mid, text="none yet", font=("Helvetica", 12, "bold")); self.img_src.grid(row=0, column=0, sticky="w")
+        self.img_mod = ttk.Label(mid, text="", foreground="gray"); self.img_mod.grid(row=1, column=0, sticky="w")
+        self.write = ttk.Button(mid, text="Write to balance", command=editor.do_write)
+        self.write.grid(row=0, column=1, rowspan=2, padx=8)
+        self.after(300, self.refresh)
+
+    def refresh(self):
+        link = self.s.link
+        if link is None:
+            self.dot.configure(foreground="#888888"); self.conn.configure(text="not connected")
+            self.state.configure(text="pick the port above and press Connect")
+        else:
+            awake = link.stream.fresh()
+            self.dot.configure(foreground="#3B6D11" if awake else "#BA7517")
+            self.conn.configure(text="connected  " + (self.s.version or ""))
+            self.state.configure(text="balance awake, streaming" if awake else
+                                 "no readings arriving: asleep (-OFF-)? press the control bar")
+        busy = self.s.status.get()
+        self.activity.configure(text=busy if self.s.busy else "")
+        ed = self.ed
+        if ed.data is None:
+            self.img_src.configure(text="none yet")
+            self.img_mod.configure(text="read the EEPROM from the balance, or open a file (Live balance tab)")
+        else:
+            src = ("from the balance, read %s" % ed.read_at) if (ed.path or "").startswith("balance") else os.path.basename(ed.path or "")
+            self.img_src.configure(text="%s  (ID %s)" % (src, ed.data[0x0E:0x11].hex()))
+            if ed.modified():
+                names = changed_parameters(ed.chip, ed.data) if ed.chip is not None else []
+                self.img_mod.configure(text="modified, NOT written" + (": " + ", ".join(names) if names else ""), foreground="#854F0B")
+            else:
+                self.img_mod.configure(text="identical to the chip", foreground="gray")
+        ok = link is not None and ed.data is not None and ed.modified() and not self.s.busy
+        self.write.state(["!disabled" if ok else "disabled"])
+        self.after(300, self.refresh)
+
+
+class ConnectionBar(ttk.Frame):
+    def __init__(self, master, session):
+        super().__init__(master, padding=(8, 8, 8, 0))
+        self.s = session
+        ttk.Label(self, text="Serial port").pack(side="left")
+        self.port = ttk.Combobox(self, width=34)
+        self.port.pack(side="left", padx=4)
+        ttk.Button(self, text="Refresh", command=self.refresh).pack(side="left")
+        ttk.Button(self, text="Connect", command=self.connect).pack(side="left", padx=4)
+        ttk.Button(self, text="Disconnect", command=session.disconnect).pack(side="left")
+        self.refresh()
+
+    def refresh(self):
+        ports = pm_serial.list_ports()
+        self.port.configure(values=ports)
+        if ports and not self.port.get():
+            self.port.set(next((p for p in ports if "usb" in p.lower()), ports[0]))
+
+    def connect(self):
+        if not self.port.get():
+            messagebox.showwarning("Port", "Pick a serial port (needs pyserial: pip install pyserial).")
+            return
+        self.s.connect(self.port.get())
+
+
 def main():
     root = tk.Tk()
     root.title("Mettler AM/PM parameter EEPROM editor")
-    app = App(root)
+    root.minsize(1100, 940)
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(2, weight=1)
+    session = Session(root)
+    nb = ttk.Notebook(root)
+    tabs = []
+    for title in ("Dump file", "Live balance", "Procedures"):
+        t = ttk.Frame(nb)
+        nb.add(t, text=title)
+        tabs.append(t)
+    log = ChangeLog(root)
+    app = App(tabs[0])
+    live = LiveEditor(tabs[1], session, log)
+    Procedures(tabs[2], session, live)
+    ConnectionBar(root, session).grid(row=0, column=0, sticky="ew")
+    StatusHeader(root, session, live).grid(row=1, column=0, sticky="ew")
+    nb.grid(row=2, column=0, sticky="nsew")
+    log.grid(row=3, column=0, sticky="ew", padx=8, pady=(4, 8))
     if len(sys.argv) > 1:
         app.do_open(sys.argv[1])
+    root.protocol("WM_DELETE_WINDOW", lambda: (session.disconnect(), root.destroy()))
     root.mainloop()
 
 
