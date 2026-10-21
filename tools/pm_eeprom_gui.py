@@ -29,7 +29,8 @@ BACKUPS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_backups
 
 
 class App(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, shared_log=None):
+        self.shared = shared_log                # one message strip for the whole window (None: this tab has its own)
         super().__init__(master, padding=8)
         self.grid(sticky="nsew")
         master.columnconfigure(0, weight=1)
@@ -157,6 +158,8 @@ class App(ttk.Frame):
         self.sel_desc.grid(row=1, column=0, columnspan=3, sticky="w")
 
     def _build_log(self):
+        if self.shared is not None:
+            return
         box = ttk.LabelFrame(self, text="Changes", padding=6)
         box.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         box.columnconfigure(0, weight=1)
@@ -166,6 +169,9 @@ class App(ttk.Frame):
 
     # ------------------------------------------------------------ helpers
     def say(self, text):
+        if self.shared is not None:
+            self.shared.add(text)
+            return
         self.log.configure(state="normal")
         self.log.insert("end", text + "\n")
         self.log.see("end")
@@ -677,11 +683,10 @@ class LiveEditor(App):
 
     def __init__(self, master, session, shared_log=None):
         self.s = session
-        self.shared = shared_log
         self.chip = None                    # what the chip held when last read or written
         self.read_at = None
         self.undo_stack, self._last, self._undoing = [], None, False
-        super().__init__(master)
+        super().__init__(master, shared_log)
         self.path = None
         self.file_lbl.configure(text="not read yet")
         self.after(300, self._tick_buttons)
@@ -888,7 +893,7 @@ def main():
         nb.add(t, text=title)
         tabs.append(t)
     log = ChangeLog(root)
-    app = App(tabs[0])
+    app = App(tabs[0], log)
     live = LiveEditor(tabs[1], session, log)
     Procedures(tabs[2], session, live)
     ConnectionBar(root, session).grid(row=0, column=0, sticky="ew")
