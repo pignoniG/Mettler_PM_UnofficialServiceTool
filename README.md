@@ -144,11 +144,11 @@ unreliable (bad contact, wrong device) - fix that before going further.
 python3 tools/pm_eeprom_gui.py            # or drop a dump on it: ... gui.py mydump.BIN
 ```
 
-![The EEPROM editor with a PM4600 dump loaded](docs/gui.png)
+![The EEPROM editor with the example PM4600 dump loaded](docs/gui.png)
 
-*A PM4600 whose DeltaRange limit has already been changed: the secondary range at 600 g is
-still there, but its increment now equals the base one, so the balance shows 10 mg over the
-whole weighing range.*
+*The Dump file tab with the example PM4600 dump. The header at the top shows the connection and the
+working image (used by the live tabs, see below); the strip at the bottom collects the messages of
+every tab.*
 
 Open a dump, and the left pane shows everything the balance stores. The right-hand panels apply the
 corrections; each one writes a line into the change log so you can see exactly what moved. Nothing is
@@ -168,6 +168,15 @@ procedures also use the raw A/D line (`--raw`) of that ROM. The tool only speaks
 Settings are those of the balance's interface sector: 9600 baud, 7 data bits, even parity, 1 stop bit, continuous
 transmission, and the receive wire of the cable connected. After a successful write the balance restarts into
 the `-OFF-` standby display and is silent until you press the control bar.
+
+![The Live balance tab with the EEPROM of a PM4600 read over serial](docs/gui_live.png)
+
+*The Live balance tab: connected to a PM4600 with the service cassette, the EEPROM read into the editor.*
+
+![The Procedures tab, linearity with segregated weights](docs/gui_procedures.png)
+
+*The Procedures tab, ready for the segregated-weights linearity: live readings, the step to do, the
+steps to capture.*
 
 A status header is always visible: connection and version, whether the balance is awake and streaming, the
 working image (read from the balance or a file, which parameters changed, written or not) and the one
