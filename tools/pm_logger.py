@@ -23,7 +23,7 @@ except ImportError:
 
 LINE = re.compile(r'^\s*(S|SD|SI|SIR|T)?\s*([-+]?\d+(?:\.\d+)?)\s*(\S+)?\s*$')
 # R line of the service-cassette patch (--raw): window sum, raw value, unfiltered / filtered temperature, window length, all hex
-RLINE = re.compile(r'^R ([0-9A-F]{8}) ([0-9A-F]{6}) ([0-9A-F]{6}) ([0-9A-F]{6}) ([0-9A-F]{2})$')
+RLINE = re.compile(r'^R ([0-9A-F]{8}) ([0-9A-F]{6})(?: ([0-9A-F]{6}) ([0-9A-F]{6}) ([0-9A-F]{2}))?$')   # long form about once a second
 
 
 def find_port():
