@@ -116,8 +116,10 @@ or as the template when programming a blank EEPROM for the same model.
 
 ## Requirements
 
-Python 3.8 or newer. No third-party packages - the GUI uses tkinter from the standard library.
-(On some Linux distributions tkinter is a separate package, e.g. `apt install python3-tk`.)
+Python 3.8 or newer. The file tools need no third-party packages - the GUI uses tkinter from the standard
+library. (On some Linux distributions tkinter is a separate package, e.g. `apt install python3-tk`.)
+The live tabs of the GUI (below) additionally need `pyserial` (`python3 -m pip install pyserial`), imported
+only when a port is opened.
 
 ## Reading and writing the chip
 
@@ -154,6 +156,52 @@ written to disk until you press *Save as...*, and *Revert* takes you back to the
 
 For an unknown balance type, type the nominal capacity in grams into the Balance box - the tool needs it
 to convert between grams and internal counts.
+
+## Live balance and service procedures
+
+The GUI has three tabs. **Dump file** is the offline editor described above. The two others talk to a balance
+over its serial line and need a cassette ROM that answers the service commands (`XV`, `XD`, `XA`/`XB`, `XL`,
+`XR`) - that ROM is not part of this repository; see
+[Mettler_PM_UnofficialServiceCassette](https://github.com/pignoniG/Mettler_PM_UnofficialServiceCassette). The
+procedures also use the raw A/D line (`--raw`) of that ROM. The tool only speaks the protocol (`tools/pm_serial.py`).
+
+Settings are those of the balance's interface sector: 9600 baud, 7 data bits, even parity, 1 stop bit, continuous
+transmission, and the receive wire of the cable connected. After a successful write the balance restarts into
+the `-OFF-` standby display and is silent until you press the control bar.
+
+A status header is always visible: connection and version, whether the balance is awake and streaming, the
+working image (read from the balance or a file, which parameters changed, written or not) and the one
+**Write to balance** button. Messages from every action collect in the *Changes* strip at the bottom.
+
+**Live balance** reads the EEPROM into an editor with the same panels as the file tab, with *Save to file*,
+*Open file* (to write a saved dump), *Undo*, *Revert*, *Verify last write* and *Restart balance*. Every write
+first reads the chip back and saves a timestamped backup to `tools/live_backups/`; if the image's ID differs
+from the chip's (board swap, replaced EEPROM) you get a separate warning and the write uses the override.
+The chip is checked before and after: the firmware rewrites bytes 0x36 and 0x39 itself at every restart.
+
+**Procedures** follows the service manual's adjustment with the adjustment cassette, working on the raw A/D
+value and the temperature count the balance streams, through the same correction model the firmware uses
+([EEPROM_MAP.md](EEPROM_MAP.md) section 3). Each step shows what to do ("Put weights A + B on the pan"), checks
+that the weight on the pan is close to what the step needs, can capture automatically once the reading is
+stable, and tares the balance (the stock `T` command) before an empty-pan step. Results are applied to the
+working image, with *Undo*; writing it is a separate, visible step. Model tolerances and reference
+resistors come from the manual's data section (`tools/pm_specs.py`).
+
+1. **Resistor** (manual 4.2.2, 4.2.3): reading error with the factory span at the test weight against the
+   1.25 % (PM) / 5 % (AM, CM) limit, and R42 from the manual's formula or as a correction of a fitted value.
+2. **Linearity** (4.2.4): with known weights - zero and loads, a fit of the L0 change; or with **segregated
+   weights** whose masses need not be known: each alone, then in growing combinations, and the masses and the
+   L0 change are solved together, so the weights' own errors and the gain error drop out.
+3. **Calibration** (4.2.5): sets the user calibration (UCAL) so the tared reading at the test weight equals the
+   weight, within the SPAN/32 range; the balance's own calibration command is not used.
+4. **Temperature** (4.2.6, 4.2.7): the drift check against the tolerance, and a fit of the zero and span
+   coefficients (Z0-Z2, S0-S2, optionally T0) from temperature steps taken live or imported from `pm_logger.py`
+   logs of an empty and a loaded pan.
+
+Checked on a PM4600: live read, write and restore, the override, the refusal paths, the resistor check,
+both linearity methods and the calibration. The temperature fit is tested on synthetic data and logs only.
+`tests/test_model.py` (run with `PM_EEPROM=dump.BIN python3 -m unittest tests.test_model`) checks the maths
+on simulated balances with known physics.
 
 ## The command line
 
