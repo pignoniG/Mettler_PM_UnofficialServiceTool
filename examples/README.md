@@ -121,9 +121,9 @@ differ, and they decode to two parameters: the span correction at the reference 
 the EEPROM against -57312 on the sticker** (+12 ppm), and the linearity term **L0 is 15994 against 29034**
 (the half-load bow after a two-point calibration drops from -381 mg to -210 mg). Everything else, including
 both temperature compensations, matches the sticker. S0 and L0 are the two values a service adjustment
-changes, so the unit was most likely readjusted after the sticker was printed. The sticker is the last one
-applied to the balance, from 2019 (the unit had been in service for a long time), so it shows the parameters of
-that date and the dump the current ones.
+changes, so the unit was most likely readjusted after the sticker was printed. The parameter sticker is
+undated; the balance's last calibration sticker is from 2019, so it had been in service for a long time. The
+parameter sticker shows the parameters from when it was printed and the dump the current ones.
 
 Compared with the certified `PM3000.BIN` above, this one has byte 2B = 0x05 (the other has 0x85), blank ID
 bytes and the configuration bytes 00-03 at what look like defaults.
