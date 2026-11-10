@@ -28,6 +28,18 @@ class LinkError(Exception):
     pass
 
 
+# the balance's serial settings are in its configuration file (EEPROM byte 01): baud rate setting 0..7 is
+# 9600, 4800, 2400, 1200, 600, 300, 150, 110 baud (timer reload table in the firmware); parity is even, odd,
+# mark or space on 7 data bits.  Scanned fastest first, even parity first.
+BAUDS = (9600, 4800, 2400, 1200, 600, 300)
+PARITIES = ('E', 'O', 'M', 'S')
+PARITY_NAME = {'E': 'even', 'O': 'odd', 'M': 'mark', 'S': 'space', 'N': 'none'}
+
+
+def describe_line(baud, parity):
+    return f'{baud} baud, {PARITY_NAME.get(parity, parity)} parity'
+
+
 def list_ports():
     try:
         import serial.tools.list_ports
@@ -144,16 +156,18 @@ class Stream:
 
 
 class Link:
-    def __init__(self, port_name, log=None):
+    def __init__(self, port_name, log=None, baud=9600, parity='E'):
         try:
             import serial
         except ImportError:
             raise LinkError('pyserial is not installed (pip install pyserial)')
         try:
-            self.p = serial.Serial(port_name, 9600, bytesize=7, parity='E', stopbits=1, timeout=0.2)
+            self.p = serial.Serial(port_name, baud, bytesize=7, parity=parity, stopbits=1, timeout=0.2)
         except (serial.SerialException, OSError) as e:
             raise LinkError(f'cannot open {port_name}: {e}')
         self.log = log or (lambda *a: None)
+        self.settings = (baud, parity)
+        self.hits = 0                           # stream lines seen, used by the settings scan
         self.stream = Stream()
         self.q = queue.Queue()                  # lines that are answers, not stream
         self._stop = threading.Event()
@@ -173,7 +187,9 @@ class Link:
             while b'\n' in buf:
                 raw, buf = buf.split(b'\n', 1)
                 l = raw.replace(b'\r', b'').strip(PAUSE + b' ')
-                if l and not self.stream.feed(l):
+                if l and self.stream.feed(l):
+                    self.hits += 1
+                elif l:
                     self.q.put(l)
 
     def close(self):
@@ -219,6 +235,55 @@ class Link:
             if l.startswith(expect):
                 return l
         raise LinkError(f'no answer {expect.decode()!r} to {cmd.decode()!r}')
+
+    def set_line(self, baud, parity):
+        self.p.baudrate = baud
+        self.p.parity = parity
+        self.settings = (baud, parity)
+        self.p.reset_input_buffer()
+
+    def probe(self, wait=0.8):
+        """at the current line settings: the XV answer if the balance gives one, 'stream' if only its own
+        readings arrive, None if nothing intelligible comes back"""
+        self.drain()
+        hits = self.hits
+        self.send(b'\n')
+        time.sleep(0.15)
+        self.send(b'XV\r\n')
+        t0 = time.time()
+        while time.time() - t0 < wait:
+            try:
+                l = self.q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if l.startswith(b'XV SVC'):
+                return l.decode()
+        return 'stream' if self.hits != hits else None
+
+    def scan(self, progress=None, settings=None):
+        """try the line settings until the balance answers; the port stays on the ones that work.
+        -> version line.  `settings` defaults to every baud rate and parity, the current setting first."""
+        combos = settings or [(b, p) for b in BAUDS for p in PARITIES]
+        combos = [self.settings] + [c for c in combos if c != self.settings]      # the current setting first
+        silent_hit = None
+        for i, (baud, par) in enumerate(combos, 1):
+            if progress:
+                progress(f'{describe_line(baud, par)}  ({i}/{len(combos)})')
+            self.set_line(baud, par)
+            r = self.probe()
+            if r and r != 'stream':
+                self.unlock()
+                return r
+            if r == 'stream' and silent_hit is None:
+                silent_hit = (baud, par)
+        if silent_hit:
+            self.set_line(*silent_hit)
+            raise LinkError(f'the balance sends readings at {describe_line(*silent_hit)} but does not answer the '
+                            'service commands: it needs a cassette with the service commands, and the receive wire '
+                            'connected.')
+        raise LinkError(f'no answer at any of {len(combos)} line settings. The balance is silent in the -OFF- '
+                        'standby display (press the control bar); it needs the receive wire connected and a '
+                        'cassette with the service commands.')
 
     def connect(self):
         """-> version line, e.g. 'XV SVC 10.45 ID 874543'"""

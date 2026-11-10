@@ -131,6 +131,12 @@ class App(ttk.Frame):
         ttk.Button(typ, text="DeltaRange: fine increment over whole range",
                    command=self.do_fine).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
+        lock = ttk.LabelFrame(right, text="Calibration lock [2B]", padding=6)
+        lock.pack(fill="x")
+        self.lock_btn = ttk.Button(lock, text="Calibration lock: -", command=self.do_lock)
+        self.lock_btn.pack(fill="x")
+        ttk.Label(lock, text="on: the jumper also locks calibration", foreground="gray").pack(anchor="w")
+
         disp = ttk.LabelFrame(right, text="Display", padding=6)
         disp.pack(fill="x", pady=(0, 6))
         ttk.Label(disp, text="Deadband [units]").grid(row=0, column=0, sticky="w")
@@ -326,6 +332,12 @@ class App(ttk.Frame):
         return int(v)
 
     @guard
+    def do_lock(self):
+        self.say(pm.set_blocking(self.data, not pm.blocking_on(self.data)))
+        self.dirty = True
+        self._refresh()
+
+    @guard
     def do_deadband(self):
         msg = pm.set_deadband(self.data, self.whole(self.deadband, "Deadband"), self.cap())
         self.dirty = True
@@ -414,6 +426,12 @@ class App(ttk.Frame):
         else:
             self.info.insert("end", self._describe())
         self.info.configure(state="disabled")
+        if self.data is None:
+            self.lock_btn.configure(text="Calibration lock: -", state="disabled")
+        else:
+            on = pm.blocking_on(self.data)
+            self.lock_btn.configure(state="normal",
+                                    text=f"Calibration lock is {'ON' if on else 'OFF'} - switch {'off' if on else 'on'}")
         name = os.path.basename(self.path) if self.path else "no file loaded"
         self.file_lbl.configure(text=name + ("  (modified)" if self.dirty else ""))
 
@@ -477,6 +495,8 @@ class Session:
         self.pending = None            # image of the last accepted write, for Verify
         self.cancel = False            # set by the Procedures tab to stop a running capture
         self.status = tk.StringVar(value="not connected")
+        self.detail = ""               # progress text of a running job, written by its thread
+        self.line = ""                 # line settings the connection ended up on
 
     def connected(self):
         if self.link is None:
@@ -502,9 +522,12 @@ class Session:
             try:
                 kind, val = q.get_nowait()
             except queue.Empty:
+                if self.detail:
+                    self.status.set(f"{what}: {self.detail}")
                 self.root.after(100, poll)
                 return
             self.busy = False
+            self.detail = ""
             self.status.set(self.version or "not connected")
             if kind == "ok":
                 done(val)
@@ -512,10 +535,12 @@ class Session:
                 messagebox.showerror("Balance", str(val))
         poll()
 
-    def connect(self, port, done=None):
+    def connect(self, port, done=None, auto=True):
         def work():
             link = pm_serial.Link(port)
             try:
+                if auto:
+                    return link, link.scan(lambda s: setattr(self, "detail", s))
                 return link, link.connect()
             except Exception:
                 link.close()
@@ -523,6 +548,7 @@ class Session:
 
         def ok(res):
             self.link, self.version = res
+            self.line = pm_serial.describe_line(*self.link.settings)
             self.status.set(self.version)
             if done:
                 done()
@@ -533,6 +559,7 @@ class Session:
         if self.link is not None:
             self.link.close()
         self.link = self.version = None
+        self.line = ""
         self.status.set("not connected")
 
     def read(self, done):
@@ -832,7 +859,7 @@ class StatusHeader(ttk.Frame):
         else:
             awake = link.stream.fresh()
             self.dot.configure(foreground="#3B6D11" if awake else "#BA7517")
-            self.conn.configure(text="connected  " + (self.s.version or ""))
+            self.conn.configure(text="connected  " + (self.s.version or "") + ("  (%s)" % self.s.line if self.s.line else ""))
             self.state.configure(text="balance awake, streaming" if awake else
                                  "no readings arriving: asleep (-OFF-)? press the control bar")
         busy = self.s.status.get()
@@ -863,6 +890,8 @@ class ConnectionBar(ttk.Frame):
         self.port.pack(side="left", padx=4)
         ttk.Button(self, text="Refresh", command=self.refresh).pack(side="left")
         ttk.Button(self, text="Connect", command=self.connect).pack(side="left", padx=4)
+        self.auto = tk.BooleanVar(value=True)
+        ttk.Checkbutton(self, text="find baud rate and parity", variable=self.auto).pack(side="left")
         ttk.Button(self, text="Disconnect", command=session.disconnect).pack(side="left")
         self.refresh()
 
@@ -876,7 +905,7 @@ class ConnectionBar(ttk.Frame):
         if not self.port.get():
             messagebox.showwarning("Port", "Pick a serial port (needs pyserial: pip install pyserial).")
             return
-        self.s.connect(self.port.get())
+        self.s.connect(self.port.get(), auto=self.auto.get())
 
 
 def main():

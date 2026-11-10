@@ -343,13 +343,16 @@ def cmd_config(x, args):
         x[a:a + n] = src[a:a + n]
 
 
-def cmd_blocking(x, args):
+def set_blocking(x, on):
     """byte 0x2B bit 2: whether the cassette jumper also blocks calibration. The configuration file
-    is locked by the jumper regardless (firmware 0xE552)."""
+    is locked by the jumper regardless (firmware 0xE552). Returns a one-line report."""
     old = blocking_on(x)
-    new = args.state == "on"
-    x[0x2B] = (x[0x2B] | 0x04) if new else (x[0x2B] & ~0x04)
-    print(f"calibration blocking: {'on' if old else 'off'} -> {'on' if new else 'off'}")
+    x[0x2B] = (x[0x2B] | 0x04) if on else (x[0x2B] & ~0x04)
+    return f"calibration lock: {'on' if old else 'off'} -> {'on' if on else 'off'}"
+
+
+def cmd_blocking(x, args):
+    print(set_blocking(x, args.state == "on").replace("calibration lock", "calibration blocking"))
     print("on  = the cassette jumper also decides whether calibration is allowed\n"
           "off = calibration always allowed\n"
           "either way, a fitted jumper locks the configuration file")
