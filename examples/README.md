@@ -1,6 +1,6 @@
 # Example dumps
 
-Five factory EEPROMs read from working balances, with the numbers printed on their parameter stickers.
+Six EEPROMs read from working balances, with the numbers printed on their parameter stickers.
 They serve two purposes: as reference data for anyone decoding their own dump, and as **templates** when
 programming a blank EEPROM - start from the dump of the same model, then load your own sticker over it
 (see the main README).
@@ -9,7 +9,7 @@ All files are in the byte order produced by the programmer they were read with (
 relative to the balance's processor); the tool detects that on its own.
 
 Each dump passes all four checksums, and typing its sticker values into the tool reproduces the cell
-block byte for byte.
+block byte for byte (the exception, `PM3000_cert13.BIN`, is described in its own section).
 
 
 ## PM200 - `PM200.BIN`
@@ -77,6 +77,56 @@ ID 824231
 19: 327999
 20: 318720
 ```
+
+## PM3000, certified variant 13 - `PM3000_cert13.BIN`
+
+Sticker ID **569781** (the EEPROM's own ID bytes 0E-10 are blank, FF FF FF) · capacity 3100.9 g · display step 0.1 g
+· calibration weight 2000 g · mode byte 08 = 0x13 (certified, national variant 13)
+
+Span TC -311 ppm/°C · L0 15994 · SPAN 437082 · UCAL -22
+
+Read from a certified unit (KM93C46 chip) whose serial settings were not the usual ones: byte 01 = 0x02 is
+2400 baud (baud setting 2; the firmware's timer table runs 9600, 4800, 2400, 1200, 600, 300, 150, 110 baud for
+settings 0 to 7), with the parity and handshake fields at 0.
+
+Parameter sticker:
+
+```
+ID 569781
+00: 1027770
+01: 853888
+02: 318780
+03: 132282
+04: 594225
+05: 1039109
+06: 460141
+07: 719544
+08: 413695
+09: 786417
+10: 197342
+11: 532480
+12: 65312
+13: 418993
+14: 125949
+15: 65551
+16: 684394
+17: 583168
+18: 917502
+19: 983946
+20: 104960
+```
+
+**This dump does not match its sticker exactly.** Lines 00-10, 13-15, 17-19 are identical. Lines 11-12 and 16 and 20
+differ, and they decode to two parameters: the span correction at the reference temperature **S0 is -57511 in
+the EEPROM against -57312 on the sticker** (+12 ppm), and the linearity term **L0 is 15994 against 29034**
+(the half-load bow after a two-point calibration drops from -381 mg to -210 mg). Everything else, including
+both temperature compensations, matches the sticker. S0 and L0 are the two values a service adjustment
+changes, so the unit was most likely readjusted after the sticker was printed. The sticker is the last one
+applied to the balance, from 2019 (the unit had been in service for a long time), so it shows the parameters of
+that date and the dump the current ones.
+
+Compared with the certified `PM3000.BIN` above, this one has byte 2B = 0x05 (the other has 0x85), blank ID
+bytes and the configuration bytes 00-03 at what look like defaults.
 
 ## PM4600 - `PM4600.BIN`
 
